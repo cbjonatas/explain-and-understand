@@ -14,7 +14,255 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      evaluation_items: {
+        Row: {
+          correction: string | null
+          created_at: string
+          description: string | null
+          evaluation_id: string
+          id: string
+          quote: string | null
+          severity: string | null
+          source_reference: string | null
+          title: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          correction?: string | null
+          created_at?: string
+          description?: string | null
+          evaluation_id: string
+          id?: string
+          quote?: string | null
+          severity?: string | null
+          source_reference?: string | null
+          title: string
+          type: string
+          user_id: string
+        }
+        Update: {
+          correction?: string | null
+          created_at?: string
+          description?: string | null
+          evaluation_id?: string
+          id?: string
+          quote?: string | null
+          severity?: string | null
+          source_reference?: string | null
+          title?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "evaluation_items_evaluation_id_fkey"
+            columns: ["evaluation_id"]
+            isOneToOne: false
+            referencedRelation: "evaluations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      evaluations: {
+        Row: {
+          completeness: number | null
+          conceptual_accuracy: number | null
+          conceptual_relationship: number | null
+          created_at: string
+          depth: number | null
+          diagnosis: string | null
+          explanation_id: string
+          followup_question: string | null
+          fundamental_concepts: number | null
+          id: string
+          progress_note: string | null
+          user_id: string
+        }
+        Insert: {
+          completeness?: number | null
+          conceptual_accuracy?: number | null
+          conceptual_relationship?: number | null
+          created_at?: string
+          depth?: number | null
+          diagnosis?: string | null
+          explanation_id: string
+          followup_question?: string | null
+          fundamental_concepts?: number | null
+          id?: string
+          progress_note?: string | null
+          user_id: string
+        }
+        Update: {
+          completeness?: number | null
+          conceptual_accuracy?: number | null
+          conceptual_relationship?: number | null
+          created_at?: string
+          depth?: number | null
+          diagnosis?: string | null
+          explanation_id?: string
+          followup_question?: string | null
+          fundamental_concepts?: number | null
+          id?: string
+          progress_note?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "evaluations_explanation_id_fkey"
+            columns: ["explanation_id"]
+            isOneToOne: false
+            referencedRelation: "explanations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      explanations: {
+        Row: {
+          attempt: number
+          audio_url: string | null
+          created_at: string
+          id: string
+          level: string | null
+          material_id: string
+          pergunta: string
+          score: number | null
+          topic_id: string
+          transcription: string | null
+          user_id: string
+        }
+        Insert: {
+          attempt?: number
+          audio_url?: string | null
+          created_at?: string
+          id?: string
+          level?: string | null
+          material_id: string
+          pergunta: string
+          score?: number | null
+          topic_id: string
+          transcription?: string | null
+          user_id: string
+        }
+        Update: {
+          attempt?: number
+          audio_url?: string | null
+          created_at?: string
+          id?: string
+          level?: string | null
+          material_id?: string
+          pergunta?: string
+          score?: number | null
+          topic_id?: string
+          transcription?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "explanations_material_id_fkey"
+            columns: ["material_id"]
+            isOneToOne: false
+            referencedRelation: "study_materials"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "explanations_topic_id_fkey"
+            columns: ["topic_id"]
+            isOneToOne: false
+            referencedRelation: "topics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          email: string | null
+          id: string
+          nome: string | null
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          id: string
+          nome?: string | null
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          id?: string
+          nome?: string | null
+        }
+        Relationships: []
+      }
+      study_materials: {
+        Row: {
+          arquivo: string | null
+          created_at: string
+          id: string
+          nome: string
+          quantidade_paginas: number | null
+          texto_extraido: string
+          user_id: string
+        }
+        Insert: {
+          arquivo?: string | null
+          created_at?: string
+          id?: string
+          nome: string
+          quantidade_paginas?: number | null
+          texto_extraido?: string
+          user_id: string
+        }
+        Update: {
+          arquivo?: string | null
+          created_at?: string
+          id?: string
+          nome?: string
+          quantidade_paginas?: number | null
+          texto_extraido?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      topics: {
+        Row: {
+          conceitos_principais: string[]
+          created_at: string
+          descricao: string | null
+          id: string
+          material_id: string
+          nome: string
+          user_id: string
+        }
+        Insert: {
+          conceitos_principais?: string[]
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          material_id: string
+          nome: string
+          user_id: string
+        }
+        Update: {
+          conceitos_principais?: string[]
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          material_id?: string
+          nome?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "topics_material_id_fkey"
+            columns: ["material_id"]
+            isOneToOne: false
+            referencedRelation: "study_materials"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
