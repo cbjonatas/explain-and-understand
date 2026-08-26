@@ -43,7 +43,7 @@ function encodeWav(chunks: Float32Array[], sampleRate: number, targetRate = 1600
 
   let pos = 44;
   for (let i = 0; i < samples.length; i++) {
-    const s = Math.max(-1, Math.min(1, samples[i]));
+    const s = Math.max(-1, Math.min(1, samples[i] ?? 0));
     view.setInt16(pos, s < 0 ? s * 0x8000 : s * 0x7fff, true);
     pos += 2;
   }
@@ -131,7 +131,7 @@ export function useRecorder() {
         const input = event.inputBuffer.getChannelData(0);
         chunksRef.current.push(new Float32Array(input));
         let peak = 0;
-        for (let i = 0; i < input.length; i += 32) peak = Math.max(peak, Math.abs(input[i]));
+        for (let i = 0; i < input.length; i += 32) peak = Math.max(peak, Math.abs(input[i] ?? 0));
         setLevel(peak);
       };
       source.connect(node);
