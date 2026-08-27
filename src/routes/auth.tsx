@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
-import { lovable } from "@/integrations/lovable";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({
@@ -86,31 +85,6 @@ function AuthPage() {
         </div>
 
         <div className="card-surface p-6">
-          <Button
-            type="button"
-            variant="secondary"
-            className="w-full"
-            onClick={async () => {
-              try {
-                await lovable.auth.signInWithOAuth("google", {
-                  redirect_uri: window.location.origin,
-                });
-              } catch (error) {
-                toast.error(
-                  error instanceof Error ? error.message : "Falha no login com Google.",
-                );
-              }
-            }}
-          >
-            Continuar com Google
-          </Button>
-
-          <div className="my-5 flex items-center gap-3 text-xs text-muted-foreground">
-            <span className="h-px flex-1 bg-border" />
-            ou use seu e-mail
-            <span className="h-px flex-1 bg-border" />
-          </div>
-
           <form onSubmit={submit} className="space-y-4">
             {mode === "signup" && (
               <div className="space-y-2">
