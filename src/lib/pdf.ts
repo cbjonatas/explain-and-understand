@@ -11,9 +11,12 @@ export type PdfExtraction = {
 async function fileToArrayBuffer(file: File | Blob): Promise<ArrayBuffer> {
   if (typeof file.arrayBuffer === "function") {
     try {
-      return await file.arrayBuffer();
+      const buffer = await file.arrayBuffer();
+      if (buffer && buffer.byteLength > 0) {
+        return buffer;
+      }
     } catch {
-      // Fall back to FileReader on any error
+      // Fall back to FileReader on any engine error
     }
   }
 
@@ -23,7 +26,7 @@ async function fileToArrayBuffer(file: File | Blob): Promise<ArrayBuffer> {
       if (reader.result instanceof ArrayBuffer) {
         resolve(reader.result);
       } else {
-        reject(new Error("Não foi possível converter o arquivo para ArrayBuffer."));
+        reject(new Error("Não foi possível converter o arquivo para buffer de memória."));
       }
     };
     reader.onerror = () => {
@@ -38,9 +41,13 @@ async function fileToArrayBuffer(file: File | Blob): Promise<ArrayBuffer> {
  * avoiding any ReadableStream methods or async iterators that break on WebKit/iOS.
  */
 async function extractPageText(page: {
-  getTextContent: (params?: Record<string, unknown>) => Promise<{ items: Array<{ str?: string }> }>;
+  getTextContent?: (params?: Record<string, unknown>) => Promise<{ items?: Array<{ str?: string }> }>;
 }): Promise<string> {
   try {
+    if (!page || typeof page.getTextContent !== "function") {
+      return "";
+    }
+
     const textContent = await page.getTextContent({
       includeMarkedContent: false,
       disableNormalization: false,
@@ -52,7 +59,7 @@ async function extractPageText(page: {
 
     const parts: string[] = [];
     for (const item of textContent.items) {
-      if (item && typeof item === "object" && "str" in item && typeof item.str === "string") {
+      if (item && typeof item === "object" && typeof item.str === "string") {
         if (item.str.trim()) {
           parts.push(item.str);
         }
@@ -61,48 +68,91 @@ async function extractPageText(page: {
 
     return parts.join(" ").replace(/\s+/g, " ").trim();
   } catch (err) {
-    console.warn("Erro ao extrair texto da página:", err);
+    console.warn("Aviso ao extrair texto da página:", err);
     return "";
   }
 }
 
 /**
  * Main PDF text extractor.
- * Uses pdfjs-dist with ArrayBuffer and standard promise APIs.
+ * Uses pdfjs-dist with ArrayBuffer, Uint8Array and standard promise APIs.
  */
 export async function extractPdfText(file: File): Promise<PdfExtraction> {
   // Import the legacy build for maximum browser compatibility (Safari/iOS, Chrome, Firefox, Edge)
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
-  const worker = await import("pdfjs-dist/legacy/build/pdf.worker.mjs?url");
-  pdfjs.GlobalWorkerOptions.workerSrc = worker.default || worker;
+  try {
+    const worker = await import("pdfjs-dist/legacy/build/pdf.worker.mjs?url");
+    if (worker?.default) {
+      pdfjs.GlobalWorkerOptions.workerSrc = worker.default;
+    }
+  } catch {
+    // Safe fallback if worker resolution is handled internally
+  }
 
-  // ArrayBuffer only — no stream APIs
+  // Convert to ArrayBuffer -> Uint8Array
   const buffer = await fileToArrayBuffer(file);
+  const uint8Data = new Uint8Array(buffer);
+
+  if (uint8Data.byteLength === 0) {
+    throw new Error("O arquivo PDF selecionado está vazio.");
+  }
+
+  // Load document safely via PDFDocumentLoadingTask
   const loadingTask = pdfjs.getDocument({
-    data: new Uint8Array(buffer),
+    data: uint8Data,
     cMapPacked: true,
     useWorkerFetch: false,
     isEvalSupported: false,
     useSystemFonts: true,
   });
 
-  const doc = await loadingTask.promise;
+  let doc: any = null;
   const chunks: string[] = [];
 
   try {
-    for (let i = 1; i <= doc.numPages; i++) {
-      const page = await doc.getPage(i);
+    doc = await loadingTask.promise;
+    const numPages = Number(doc?.numPages) || 0;
+
+    if (numPages === 0) {
+      throw new Error("O documento PDF não contém páginas válidas.");
+    }
+
+    for (let i = 1; i <= numPages; i++) {
+      let page: any = null;
       try {
-        const pageText = await extractPageText(page as never);
+        page = await doc.getPage(i);
+        const pageText = await extractPageText(page);
         if (pageText) {
           chunks.push(`[Página ${i}]\n${pageText}`);
         }
+      } catch (pageError) {
+        console.warn(`Aviso ao ler a página ${i}:`, pageError);
       } finally {
-        page.cleanup?.();
+        if (page && typeof page.cleanup === "function") {
+          try {
+            page.cleanup();
+          } catch {
+            // Safe ignore
+          }
+        }
       }
     }
   } finally {
-    await doc.destroy();
+    // Safe cleanup without calling non-existent .destroy() on doc proxy
+    if (doc && typeof doc.cleanup === "function") {
+      try {
+        doc.cleanup();
+      } catch {
+        // Safe ignore
+      }
+    }
+    if (loadingTask && typeof loadingTask.destroy === "function") {
+      try {
+        await loadingTask.destroy();
+      } catch {
+        // Safe ignore
+      }
+    }
   }
 
   const text = chunks.join("\n\n");
@@ -115,5 +165,5 @@ export async function extractPdfText(file: File): Promise<PdfExtraction> {
     );
   }
 
-  return { pages: doc.numPages, text };
+  return { pages: doc?.numPages ?? chunks.length, text };
 }
