@@ -70,6 +70,8 @@ export async function callAiJson<T>(system: string, user: string): Promise<T> {
 export async function transcribeAudioFile(file: Blob, filename: string): Promise<string> {
   const form = new FormData();
   form.append("model", "openai/gpt-4o-transcribe");
+  form.append("language", "pt");
+  form.append("prompt", "Transcrição de explicação oral de um estudante brasileiro em português do Brasil (pt-BR).");
   form.append("file", file, filename);
 
   const res = await fetch(`${GATEWAY}/audio/transcriptions`, {

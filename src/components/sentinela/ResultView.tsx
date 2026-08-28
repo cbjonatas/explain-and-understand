@@ -3,11 +3,17 @@ import {
   CheckCircle2,
   CircleHelp,
   Lightbulb,
+  Pause,
+  Play,
+  Square,
   TrendingDown,
   TrendingUp,
+  Volume2,
 } from "lucide-react";
 
+import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { useSentinelaVoice } from "@/hooks/useSentinelaVoice";
 import { CRITERIA_LABELS, type EvaluationResult } from "@/lib/sentinela-types";
 import { cn } from "@/lib/utils";
 
@@ -24,8 +30,119 @@ export function ResultView({ result }: { result: EvaluationResult }) {
   const delta =
     result.previousScore === null ? null : result.score - result.previousScore;
 
+  const voice = useSentinelaVoice();
+
+  // Build a natural spoken text in Brazilian Portuguese
+  function buildSpokenAnalysis(): string {
+    const parts: string[] = [];
+
+    parts.push(
+      `Análise da Sentinela para o assunto ${result.topicName}.`,
+      `Sua nota foi ${result.score} de 100, com nível ${result.level}.`,
+    );
+
+    if (result.summary) {
+      parts.push(result.summary);
+    }
+
+    if (result.diagnosis) {
+      parts.push(`Diagnóstico de estudo: ${result.diagnosis}`);
+    }
+
+    const errors = result.items.filter((i) => i.type === "error");
+    if (errors.length > 0) {
+      parts.push(
+        `Pontos de atenção e correções: ${errors
+          .slice(0, 3)
+          .map((e) => `${e.title}. ${e.correction ? "O correto é: " + e.correction : ""}`)
+          .join(" ")}`,
+      );
+    }
+
+    const correct = result.items.filter((i) => i.type === "correct");
+    if (correct.length > 0) {
+      parts.push(
+        `Principais acertos na sua explicação: ${correct
+          .slice(0, 3)
+          .map((c) => c.title)
+          .join(", ")}.`,
+      );
+    }
+
+    if (result.followupQuestion) {
+      parts.push(`Para aprofundar seu conhecimento, responda a esta pergunta: ${result.followupQuestion}`);
+    }
+
+    return parts.join(" ");
+  }
+
+  function handlePlayAudio() {
+    if (voice.state === "paused") {
+      voice.resume();
+    } else {
+      voice.speak(buildSpokenAnalysis());
+    }
+  }
+
   return (
     <div className="space-y-6">
+      {/* Voice Reader Bar */}
+      <div className="card-surface flex flex-wrap items-center justify-between gap-4 border-primary/30 bg-primary/5 p-4 sm:p-5">
+        <div className="flex items-center gap-3">
+          <div className={cn(
+            "flex size-10 items-center justify-center rounded-full border border-primary/40 bg-primary/10 text-primary",
+            voice.state === "playing" && "animate-pulse ring-2 ring-primary/30"
+          )}>
+            <Volume2 className="size-5" />
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold">Voz da Sentinela (pt-BR)</h3>
+            <p className="text-xs text-muted-foreground">
+              {voice.state === "playing"
+                ? "Sentinela lendo sua análise em voz alta..."
+                : voice.state === "paused"
+                ? "Leitura pausada."
+                : "Ouça o diagnóstico e o feedback da sua explicação."}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {voice.state === "idle" && (
+            <Button onClick={handlePlayAudio} className="gap-2">
+              <Volume2 className="size-4" />
+              OUVIR ANÁLISE
+            </Button>
+          )}
+
+          {voice.state === "playing" && (
+            <>
+              <Button variant="secondary" size="sm" onClick={voice.pause} className="gap-1.5">
+                <Pause className="size-4" />
+                Pausar
+              </Button>
+              <Button variant="destructive" size="sm" onClick={voice.stop} className="gap-1.5">
+                <Square className="size-4" />
+                Parar
+              </Button>
+            </>
+          )}
+
+          {voice.state === "paused" && (
+            <>
+              <Button size="sm" onClick={voice.resume} className="gap-1.5">
+                <Play className="size-4" />
+                Continuar
+              </Button>
+              <Button variant="ghost" size="sm" onClick={voice.stop} className="gap-1.5">
+                <Square className="size-4" />
+                Parar
+              </Button>
+            </>
+          )}
+        </div>
+      </div>
+
       <div className="card-surface p-6 text-center">
         <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">
           Tentativa {result.attempt} · {result.topicName}

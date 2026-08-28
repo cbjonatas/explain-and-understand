@@ -2,7 +2,20 @@ import { useMutation } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useRef, useState } from "react";
-import { Loader2, Mic, Pause, Play, RotateCcw, Square, Upload } from "lucide-react";
+import {
+  ExternalLink,
+  FileText,
+  Loader2,
+  Mic,
+  Pause,
+  Play,
+  RefreshCw,
+  RotateCcw,
+  Send,
+  Square,
+  Trash2,
+  Upload,
+} from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
 
@@ -43,12 +56,20 @@ export const Route = createFileRoute("/_authenticated/study")({
 
 type Step = "upload" | "topics" | "question" | "review" | "result";
 
+type AttachedFile = {
+  name: string;
+  sizeFormatted: string;
+  pages: number;
+  url: string | null;
+};
+
 function StudyPage() {
   const { topic: topicParam } = Route.useSearch();
   const navigate = useNavigate();
   const recorder = useRecorder();
 
   const [step, setStep] = useState<Step>(topicParam ? "question" : "upload");
+  const [attachedFile, setAttachedFile] = useState<AttachedFile | null>(null);
   const [topics, setTopics] = useState<TopicSummary[]>([]);
   const [topicId, setTopicId] = useState<string | null>(topicParam ?? null);
   const [topicName, setTopicName] = useState<string>("");
@@ -65,10 +86,27 @@ function StudyPage() {
   const runTranscribe = useServerFn(transcribeExplanation);
   const runEvaluate = useServerFn(evaluateExplanation);
 
+  // Clean up blob URL on unmount or file reset
+  useEffect(() => {
+    return () => {
+      if (attachedFile?.url) {
+        URL.revokeObjectURL(attachedFile.url);
+      }
+    };
+  }, [attachedFile]);
+
   const upload = useMutation({
     mutationFn: async (file: File) => {
       setProgress("Lendo o PDF...");
       const { pages, text } = await extractPdfText(file);
+      const fileUrl = URL.createObjectURL(file);
+      setAttachedFile({
+        name: file.name,
+        sizeFormatted: `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
+        pages,
+        url: fileUrl,
+      });
+
       setProgress("Identificando os assuntos do material...");
       const response = await runProcessMaterial({
         data: { nome: file.name.replace(/\.pdf$/i, ""), arquivo: null, paginas: pages, texto: text },
@@ -115,7 +153,7 @@ function StudyPage() {
         .upload(path, blob, { contentType: "audio/wav" });
       if (error) throw new Error("Não foi possível enviar o áudio. Tente novamente.");
       setAudioPath(path);
-      setProgress("Transcrevendo sua explicação...");
+      setProgress("Transcrevendo sua explicação (pt-BR)...");
       const response = await runTranscribe({ data: { path } });
       if (!response.ok) throw new Error(response.message);
       return response.data.text;
@@ -124,6 +162,7 @@ function StudyPage() {
       setProgress(null);
       setTranscription(text);
       setStep("review");
+      toast.success("Áudio transcrito com sucesso! Confira sua explicação antes de enviar.");
     },
     onError: (error) => {
       setProgress(null);
@@ -134,7 +173,7 @@ function StudyPage() {
   const evaluate = useMutation({
     mutationFn: async () => {
       if (!topicId) throw new Error("Escolha um assunto.");
-      setProgress("Analisando sua explicação...");
+      setProgress("A Sentinela está analisando sua explicação com base no PDF anexado...");
       const response = await runEvaluate({
         data: {
           topicId,
@@ -152,6 +191,7 @@ function StudyPage() {
       setResult(data);
       setPreviousExplanationId(data.explanationId);
       setStep("result");
+      toast.success("Análise concluída pela Sentinela!");
     },
     onError: (error) => {
       setProgress(null);
@@ -176,9 +216,115 @@ function StudyPage() {
     setStep("question");
   }
 
+  function handleRemoveFile() {
+    if (attachedFile?.url) {
+      URL.revokeObjectURL(attachedFile.url);
+    }
+    setAttachedFile(null);
+    setTopics([]);
+    setTopicId(null);
+    setTopicName("");
+    setPergunta("");
+    setTranscription("");
+    setAudioPath(null);
+    setResult(null);
+    recorder.reset();
+    setStep("upload");
+    toast.info("Arquivo removido. Selecione um novo PDF.");
+  }
+
+  function handleReplaceFile() {
+    fileRef.current?.click();
+  }
+
+  function handleOpenPdf() {
+    if (attachedFile?.url) {
+      window.open(attachedFile.url, "_blank", "noopener,noreferrer");
+    }
+  }
+
   return (
     <AppShell>
       <StepHeader step={step} />
+
+      {/* Hidden file input */}
+      <input
+        ref={fileRef}
+        type="file"
+        accept="application/pdf"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          event.target.value = "";
+          if (!file) return;
+          if (file.size > 20 * 1024 * 1024) {
+            toast.error("O PDF passa de 20 MB. Envie um arquivo menor.");
+            return;
+          }
+          upload.mutate(file);
+        }}
+      />
+
+      {/* Attached File Banner (Visible whenever a file is attached) */}
+      {attachedFile && (
+        <div className="card-surface mt-6 flex flex-wrap items-center justify-between gap-4 border-primary/30 bg-primary/5 p-4 sm:p-5">
+          <div className="flex items-center gap-3">
+            <div className="flex size-10 items-center justify-center rounded-lg border border-primary/40 bg-primary/10 text-primary">
+              <FileText className="size-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="rounded bg-primary/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-primary">
+                  PDF Anexado
+                </span>
+                <span className="truncate text-sm font-semibold max-w-[200px] sm:max-w-xs md:max-w-sm">
+                  {attachedFile.name}
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {attachedFile.pages} {attachedFile.pages === 1 ? "página" : "páginas"} · {attachedFile.sizeFormatted}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {attachedFile.url && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleOpenPdf}
+                className="gap-1.5 text-xs"
+                title="Abrir e visualizar PDF"
+              >
+                <ExternalLink className="size-3.5" />
+                Visualizar PDF
+              </Button>
+            )}
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleReplaceFile}
+              disabled={busy}
+              className="gap-1.5 text-xs"
+              title="Trocar arquivo por outro PDF"
+            >
+              <RefreshCw className="size-3.5" />
+              Trocar PDF
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleRemoveFile}
+              disabled={busy}
+              className="gap-1.5 text-xs text-error hover:bg-error/10 hover:text-error"
+              title="Excluir arquivo anexado"
+            >
+              <Trash2 className="size-3.5" />
+              Excluir
+            </Button>
+          </div>
+        </div>
+      )}
 
       {progress && (
         <div className="card-surface mt-6 flex items-center gap-3 p-5 text-sm">
@@ -187,7 +333,7 @@ function StudyPage() {
         </div>
       )}
 
-      {step === "upload" && (
+      {step === "upload" && !attachedFile && (
         <div className="card-surface mt-6 p-8 text-center">
           <Upload className="mx-auto size-8 text-primary" />
           <h2 className="mt-4 text-lg font-semibold">Envie seu material de estudo</h2>
@@ -195,23 +341,8 @@ function StudyPage() {
             PDF com texto selecionável, até 20 MB. O Sentinela lê o conteúdo e identifica os
             assuntos.
           </p>
-          <input
-            ref={fileRef}
-            type="file"
-            accept="application/pdf"
-            className="hidden"
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              event.target.value = "";
-              if (!file) return;
-              if (file.size > 20 * 1024 * 1024) {
-                toast.error("O PDF passa de 20 MB. Envie um arquivo menor.");
-                return;
-              }
-              upload.mutate(file);
-            }}
-          />
           <Button className="mt-6" disabled={busy} onClick={() => fileRef.current?.click()}>
+            <Upload className="size-4" />
             Escolher PDF
           </Button>
         </div>
@@ -323,7 +454,7 @@ function StudyPage() {
                     disabled={busy}
                     onClick={() => recorder.blob && submitAudio.mutate(recorder.blob)}
                   >
-                    Enviar para análise
+                    Gerar transcrição (pt-BR)
                   </Button>
                 </>
               )}
@@ -340,19 +471,25 @@ function StudyPage() {
         <div className="card-surface mt-6 p-6">
           <h2 className="text-lg font-semibold">Confira sua transcrição</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Ajuste apenas erros de transcrição antes da análise.
+            Ajuste possíveis detalhes da fala antes de enviar para a avaliação da Sentinela.
           </p>
           <Textarea
-            className="mt-4 min-h-52"
+            className="mt-4 min-h-52 text-base leading-relaxed"
             value={transcription}
             onChange={(event) => setTranscription(event.target.value)}
+            placeholder="Sua fala transcrita aparecerá aqui..."
           />
-          <div className="mt-5 flex flex-wrap gap-2">
-            <Button variant="ghost" onClick={retry} disabled={busy}>
+          <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+            <Button variant="ghost" onClick={retry} disabled={busy} className="gap-1.5">
               <RotateCcw className="size-4" /> Gravar de novo
             </Button>
-            <Button disabled={busy || transcription.trim().length < 40} onClick={() => evaluate.mutate()}>
-              Analisar minha explicação
+            <Button
+              disabled={busy || transcription.trim().length < 40}
+              onClick={() => evaluate.mutate()}
+              className="gap-2 px-6 font-semibold"
+            >
+              <Send className="size-4" />
+              ENVIAR ANÁLISE
             </Button>
           </div>
         </div>
@@ -362,7 +499,7 @@ function StudyPage() {
         <div className="mt-6 space-y-6">
           <ResultView result={result} />
           <div className="flex flex-wrap gap-2">
-            <Button onClick={retry}>
+            <Button onClick={retry} className="gap-1.5">
               <RotateCcw className="size-4" /> Refazer explicação
             </Button>
             <Button variant="secondary" onClick={() => navigate({ to: "/history" })}>
