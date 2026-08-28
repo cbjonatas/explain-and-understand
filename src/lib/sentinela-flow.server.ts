@@ -12,9 +12,131 @@ import {
   transcribeAudioFile,
   weightedScore,
 } from "./sentinela.server";
-import type { EvaluationItem, EvaluationResult, TopicSummary } from "./sentinela-types";
+import type {
+  EvaluationItem,
+  EvaluationResult,
+  MaterialStructure,
+  TopicSummary,
+} from "./sentinela-types";
 
 type Db = SupabaseClient<any, "public", any>;
+
+export async function analyzeMaterialStructureFlow(
+  _supabase: Db,
+  _userId: string,
+  data: { nome: string; paginas: number; texto: string },
+): Promise<MaterialStructure> {
+  const texto = data.texto.trim();
+  if (texto.length < 200) {
+    throw new AiError(
+      422,
+      "Este PDF não tem texto suficiente para análise. Envie um PDF com conteúdo selecionável.",
+    );
+  }
+
+  const parsed = await callAiJson<{
+    grupo?: string;
+    concurso?: string;
+    disciplina?: string;
+    assunto?: string;
+    topics?: Array<{ nome?: string; descricao?: string; conceitos_principais?: string[] }>;
+  }>(TOPICS_SYSTEM, `Texto do material "${data.nome}":\n\n${texto.slice(0, 90000)}`);
+
+  const rawTopics = parsed.topics ?? [];
+  const topics = rawTopics
+    .filter((t) => t.nome && t.nome.trim().length > 1)
+    .slice(0, 12)
+    .map((t, index) => ({
+      tempId: `topic-${index + 1}-${Date.now()}`,
+      nome: t.nome!.trim().slice(0, 80),
+      descricao: t.descricao?.trim() ?? null,
+      conceitos_principais: (t.conceitos_principais ?? []).slice(0, 8).map((c) => String(c)),
+      selected: true,
+    }));
+
+  if (topics.length === 0) {
+    throw new AiError(422, "Não conseguimos identificar assuntos neste material. Tente outro PDF.");
+  }
+
+  return {
+    grupo: parsed.grupo?.trim() || `Grupo ${data.nome}`,
+    concurso: parsed.concurso?.trim() || "Geral",
+    disciplina: parsed.disciplina?.trim() || "Geral",
+    assunto: parsed.assunto?.trim() || data.nome,
+    topics,
+  };
+}
+
+export async function saveCustomMaterialStructureFlow(
+  supabase: Db,
+  userId: string,
+  data: {
+    nome: string;
+    arquivo: string | null;
+    paginas: number;
+    texto: string;
+    grupo?: string;
+    concurso?: string;
+    disciplina?: string;
+    assunto?: string;
+    topics: Array<{ nome: string; descricao: string | null; conceitos_principais: string[] }>;
+  },
+) {
+  const texto = data.texto.trim();
+  if (data.topics.length === 0) {
+    throw new AiError(422, "Selecione pelo menos um tópico para estudar.");
+  }
+
+  const displayName = data.assunto?.trim() || data.nome;
+
+  const insertPayload: Record<string, any> = {
+    user_id: userId,
+    nome: displayName,
+    arquivo: data.arquivo,
+    quantidade_paginas: data.paginas,
+    texto_extraido: texto.slice(0, 400000),
+  };
+  if (data.grupo) insertPayload.grupo = data.grupo.trim();
+  if (data.concurso) insertPayload.concurso = data.concurso.trim();
+  if (data.disciplina) insertPayload.disciplina = data.disciplina.trim();
+
+  let { data: material, error } = await supabase
+    .from("study_materials")
+    .insert(insertPayload)
+    .select("id")
+    .single();
+
+  if (error && (error.message?.includes("column") || (error as any).code === "PGRST204")) {
+    delete insertPayload.grupo;
+    delete insertPayload.concurso;
+    delete insertPayload.disciplina;
+    const retry = await supabase
+      .from("study_materials")
+      .insert(insertPayload)
+      .select("id")
+      .single();
+    material = retry.data;
+    error = retry.error;
+  }
+
+  if (error || !material) throw new AiError(500, "Não foi possível salvar o material.");
+
+  const topicsToInsert = data.topics.map((t) => ({
+    material_id: material.id,
+    user_id: userId,
+    nome: t.nome.trim().slice(0, 80),
+    descricao: t.descricao?.trim() ?? null,
+    conceitos_principais: t.conceitos_principais.slice(0, 8).map((c) => String(c)),
+  }));
+
+  const { data: inserted, error: topicError } = await supabase
+    .from("topics")
+    .insert(topicsToInsert)
+    .select("id, nome, descricao, conceitos_principais");
+  if (topicError || !inserted) throw new AiError(500, "Não foi possível salvar os tópicos.");
+
+  return { materialId: material.id as string, topics: inserted as TopicSummary[] };
+}
 
 export async function processMaterialFlow(
   supabase: Db,

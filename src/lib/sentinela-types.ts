@@ -43,6 +43,22 @@ export type TopicSummary = {
   conceitos_principais: string[];
 };
 
+export type IdentifiedTopic = {
+  tempId: string;
+  nome: string;
+  descricao: string | null;
+  conceitos_principais: string[];
+  selected: boolean;
+};
+
+export type MaterialStructure = {
+  grupo: string;
+  concurso: string;
+  disciplina: string;
+  assunto: string;
+  topics: IdentifiedTopic[];
+};
+
 export const CRITERIA_LABELS: Array<{ key: keyof CriteriaScores; label: string; weight: string }> = [
   { key: "conceptual_accuracy", label: "Precisão conceitual", weight: "30%" },
   { key: "fundamental_concepts", label: "Conceitos fundamentais", weight: "25%" },

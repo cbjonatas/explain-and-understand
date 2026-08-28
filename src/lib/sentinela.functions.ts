@@ -3,13 +3,67 @@ import { z } from "zod";
 
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import {
+  analyzeMaterialStructureFlow,
   evaluateFlow,
   generateQuestionFlow,
   processMaterialFlow,
+  saveCustomMaterialStructureFlow,
   transcribeFlow,
 } from "./sentinela-flow.server";
 import { toFlowResult } from "./sentinela-result";
-import type { EvaluationResult, TopicSummary } from "./sentinela-types";
+import type { EvaluationResult, MaterialStructure, TopicSummary } from "./sentinela-types";
+
+export const analyzeMaterialStructure = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data) =>
+    z
+      .object({
+        nome: z.string().min(1).max(300),
+        paginas: z.number().int().min(0).max(5000),
+        texto: z.string().min(1).max(600000),
+      })
+      .parse(data),
+  )
+  .handler(
+    async ({
+      data,
+      context,
+    }): Promise<{ ok: true; data: MaterialStructure } | { ok: false; message: string }> =>
+      toFlowResult(() => analyzeMaterialStructureFlow(context.supabase, context.userId, data)),
+  );
+
+export const saveCustomMaterialStructure = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data) =>
+    z
+      .object({
+        nome: z.string().min(1).max(300),
+        arquivo: z.string().nullable().default(null),
+        paginas: z.number().int().min(0).max(5000),
+        texto: z.string().min(1).max(600000),
+        grupo: z.string().optional(),
+        concurso: z.string().optional(),
+        disciplina: z.string().optional(),
+        assunto: z.string().optional(),
+        topics: z.array(
+          z.object({
+            nome: z.string().min(1).max(100),
+            descricao: z.string().nullable(),
+            conceitos_principais: z.array(z.string()),
+          }),
+        ),
+      })
+      .parse(data),
+  )
+  .handler(
+    async ({
+      data,
+      context,
+    }): Promise<
+      { ok: true; data: { materialId: string; topics: TopicSummary[] } } | { ok: false; message: string }
+    > =>
+      toFlowResult(() => saveCustomMaterialStructureFlow(context.supabase, context.userId, data)),
+  );
 
 export const processMaterial = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])

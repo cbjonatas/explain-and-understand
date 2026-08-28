@@ -1,17 +1,27 @@
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useRef, useState } from "react";
 import {
+  BookOpen,
+  Check,
+  ChevronRight,
   ExternalLink,
   FileText,
+  Folder,
+  FolderOpen,
+  GraduationCap,
+  Layers,
+  Library,
   Loader2,
   Mic,
   Pause,
   Play,
+  Plus,
   RefreshCw,
   RotateCcw,
   Send,
+  Sparkles,
   Square,
   Trash2,
   Upload,
@@ -22,17 +32,21 @@ import { z } from "zod";
 import { ResultView } from "@/components/sentinela/ResultView";
 import { AppShell } from "@/components/sentinela/Shell";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { formatTime, MAX_RECORDING_SECONDS, useRecorder } from "@/hooks/useRecorder";
+import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { extractPdfText } from "@/lib/pdf";
 import {
+  analyzeMaterialStructure,
   evaluateExplanation,
   generateQuestion,
-  processMaterial,
+  saveCustomMaterialStructure,
   transcribeExplanation,
 } from "@/lib/sentinela.functions";
-import type { EvaluationResult, TopicSummary } from "@/lib/sentinela-types";
+import type { EvaluationResult, IdentifiedTopic, MaterialStructure, TopicSummary } from "@/lib/sentinela-types";
 
 export const Route = createFileRoute("/_authenticated/study")({
   validateSearch: z.object({ topic: z.string().uuid().optional() }),
@@ -42,34 +56,47 @@ export const Route = createFileRoute("/_authenticated/study")({
       {
         name: "description",
         content:
-          "Envie um PDF, escolha um assunto, grave sua explicação e receba avaliação com nota e diagnóstico.",
+          "Envie um PDF ou escolha da sua biblioteca, grave sua explicação e receba avaliação com nota e diagnóstico da Sentinela.",
       },
       { property: "og:title", content: "Nova sessão — SENTINELA" },
       {
         property: "og:description",
-        content: "PDF, assunto, pergunta, áudio, transcrição e avaliação por IA.",
+        content: "PDF, estrutura de estudo, pergunta, áudio, transcrição e avaliação por IA.",
       },
     ],
   }),
   component: StudyPage,
 });
 
-type Step = "upload" | "topics" | "question" | "review" | "result";
+type Step = "upload" | "structure" | "topics" | "question" | "review" | "result";
 
 type AttachedFile = {
   name: string;
   sizeFormatted: string;
   pages: number;
   url: string | null;
+  text: string;
 };
 
 function StudyPage() {
+  const { user } = useAuth();
   const { topic: topicParam } = Route.useSearch();
   const navigate = useNavigate();
   const recorder = useRecorder();
 
   const [step, setStep] = useState<Step>(topicParam ? "question" : "upload");
+  const [uploadMode, setUploadMode] = useState<"new_pdf" | "library">("new_pdf");
   const [attachedFile, setAttachedFile] = useState<AttachedFile | null>(null);
+
+  // Grouping & Structure state
+  const [structure, setStructure] = useState<MaterialStructure>({
+    grupo: "",
+    concurso: "",
+    disciplina: "",
+    assunto: "",
+    topics: [],
+  });
+
   const [topics, setTopics] = useState<TopicSummary[]>([]);
   const [topicId, setTopicId] = useState<string | null>(topicParam ?? null);
   const [topicName, setTopicName] = useState<string>("");
@@ -81,10 +108,28 @@ function StudyPage() {
   const [progress, setProgress] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const runProcessMaterial = useServerFn(processMaterial);
+  // New custom topic draft
+  const [newTopicName, setNewTopicName] = useState("");
+
+  const runAnalyzeStructure = useServerFn(analyzeMaterialStructure);
+  const runSaveStructure = useServerFn(saveCustomMaterialStructure);
   const runGenerateQuestion = useServerFn(generateQuestion);
   const runTranscribe = useServerFn(transcribeExplanation);
   const runEvaluate = useServerFn(evaluateExplanation);
+
+  // Fetch library materials for existing selection
+  const libraryQuery = useQuery({
+    queryKey: ["library-materials", user?.id],
+    enabled: !!user && step === "upload",
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("study_materials")
+        .select("id, nome, grupo, concurso, disciplina, topics(id, nome, descricao, conceitos_principais)")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
 
   // Clean up blob URL on unmount or file reset
   useEffect(() => {
@@ -95,21 +140,64 @@ function StudyPage() {
     };
   }, [attachedFile]);
 
-  const upload = useMutation({
+  const uploadAndAnalyze = useMutation({
     mutationFn: async (file: File) => {
       setProgress("Lendo o PDF...");
       const { pages, text } = await extractPdfText(file);
       const fileUrl = URL.createObjectURL(file);
-      setAttachedFile({
+      const fileData: AttachedFile = {
         name: file.name,
         sizeFormatted: `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
         pages,
         url: fileUrl,
-      });
+        text,
+      };
+      setAttachedFile(fileData);
 
-      setProgress("Identificando os assuntos do material...");
-      const response = await runProcessMaterial({
-        data: { nome: file.name.replace(/\.pdf$/i, ""), arquivo: null, paginas: pages, texto: text },
+      setProgress("A Sentinela está identificando a estrutura do material (Concurso, Disciplina, Assunto e Tópicos)...");
+      const response = await runAnalyzeStructure({
+        data: { nome: file.name.replace(/\.pdf$/i, ""), paginas: pages, texto: text },
+      });
+      if (!response.ok) throw new Error(response.message);
+      return response.data;
+    },
+    onSuccess: (data) => {
+      setProgress(null);
+      setStructure(data);
+      setStep("structure");
+      toast.success("Estrutura identificada pela Sentinela! Confira e personalize como desejar.");
+    },
+    onError: (error) => {
+      setProgress(null);
+      toast.error(error instanceof Error ? error.message : "Falha ao analisar o PDF.");
+    },
+  });
+
+  const confirmStructure = useMutation({
+    mutationFn: async () => {
+      if (!attachedFile) throw new Error("Nenhum arquivo anexado.");
+      const selectedTopics = structure.topics.filter((t) => t.selected);
+      if (selectedTopics.length === 0) {
+        throw new Error("Selecione pelo menos um tópico para estudar.");
+      }
+
+      setProgress("Salvando a organização do material...");
+      const response = await runSaveStructure({
+        data: {
+          nome: structure.assunto.trim() || attachedFile.name.replace(/\.pdf$/i, ""),
+          arquivo: null,
+          paginas: attachedFile.pages,
+          texto: attachedFile.text,
+          grupo: structure.grupo,
+          concurso: structure.concurso,
+          disciplina: structure.disciplina,
+          assunto: structure.assunto,
+          topics: selectedTopics.map((t) => ({
+            nome: t.nome.trim(),
+            descricao: t.descricao,
+            conceitos_principais: t.conceitos_principais,
+          })),
+        },
       });
       if (!response.ok) throw new Error(response.message);
       return response.data;
@@ -118,11 +206,11 @@ function StudyPage() {
       setProgress(null);
       setTopics(data.topics);
       setStep("topics");
-      toast.success("PDF processado com sucesso! Escolha um assunto para começar.");
+      toast.success("Material organizado com sucesso! Escolha o tópico para iniciar sua explicação.");
     },
     onError: (error) => {
       setProgress(null);
-      toast.error(error instanceof Error ? error.message : "Falha ao processar o PDF.");
+      toast.error(error instanceof Error ? error.message : "Erro ao salvar estrutura.");
     },
   });
 
@@ -173,7 +261,7 @@ function StudyPage() {
   const evaluate = useMutation({
     mutationFn: async () => {
       if (!topicId) throw new Error("Escolha um assunto.");
-      setProgress("A Sentinela está analisando sua explicação com base no PDF anexado...");
+      setProgress("A Sentinela está analisando sua explicação com base no conteúdo selecionado...");
       const response = await runEvaluate({
         data: {
           topicId,
@@ -206,7 +294,11 @@ function StudyPage() {
   }, [topicParam]);
 
   const busy =
-    upload.isPending || question.isPending || submitAudio.isPending || evaluate.isPending;
+    uploadAndAnalyze.isPending ||
+    confirmStructure.isPending ||
+    question.isPending ||
+    submitAudio.isPending ||
+    evaluate.isPending;
 
   function retry() {
     recorder.reset();
@@ -221,6 +313,7 @@ function StudyPage() {
       URL.revokeObjectURL(attachedFile.url);
     }
     setAttachedFile(null);
+    setStructure({ grupo: "", concurso: "", disciplina: "", assunto: "", topics: [] });
     setTopics([]);
     setTopicId(null);
     setTopicName("");
@@ -230,7 +323,7 @@ function StudyPage() {
     setResult(null);
     recorder.reset();
     setStep("upload");
-    toast.info("Arquivo removido. Selecione um novo PDF.");
+    toast.info("Arquivo removido.");
   }
 
   function handleReplaceFile() {
@@ -241,6 +334,56 @@ function StudyPage() {
     if (attachedFile?.url) {
       window.open(attachedFile.url, "_blank", "noopener,noreferrer");
     }
+  }
+
+  // Topic editing helpers
+  function toggleTopicSelection(tempId: string) {
+    setStructure((prev) => ({
+      ...prev,
+      topics: prev.topics.map((t) => (t.tempId === tempId ? { ...t, selected: !t.selected } : t)),
+    }));
+  }
+
+  function updateTopicName(tempId: string, name: string) {
+    setStructure((prev) => ({
+      ...prev,
+      topics: prev.topics.map((t) => (t.tempId === tempId ? { ...t, nome: name } : t)),
+    }));
+  }
+
+  function deleteTopic(tempId: string) {
+    setStructure((prev) => ({
+      ...prev,
+      topics: prev.topics.filter((t) => t.tempId !== tempId),
+    }));
+    toast.info("Tópico removido da lista.");
+  }
+
+  function addNewTopic() {
+    if (!newTopicName.trim()) return;
+    const newTopic: IdentifiedTopic = {
+      tempId: `custom-topic-${Date.now()}`,
+      nome: newTopicName.trim(),
+      descricao: "Tópico adicionado manualmente pelo aluno.",
+      conceitos_principais: [],
+      selected: true,
+    };
+    setStructure((prev) => ({
+      ...prev,
+      topics: [...prev.topics, newTopic],
+    }));
+    setNewTopicName("");
+    toast.success("Novo tópico adicionado!");
+  }
+
+  // Grouping for library materials selection
+  const libraryGrouped: Record<string, any[]> = {};
+  for (const m of libraryQuery.data ?? []) {
+    const g = (m as any).grupo?.trim() || "Geral / Sem Grupo";
+    if (!libraryGrouped[g]) {
+      libraryGrouped[g] = [];
+    }
+    libraryGrouped[g].push(m);
   }
 
   return (
@@ -261,7 +404,7 @@ function StudyPage() {
             toast.error("O PDF passa de 20 MB. Envie um arquivo menor.");
             return;
           }
-          upload.mutate(file);
+          uploadAndAnalyze.mutate(file);
         }}
       />
 
@@ -333,26 +476,304 @@ function StudyPage() {
         </div>
       )}
 
+      {/* Step 1: Upload PDF OR Select from Library */}
       {step === "upload" && !attachedFile && (
-        <div className="card-surface mt-6 p-8 text-center">
-          <Upload className="mx-auto size-8 text-primary" />
-          <h2 className="mt-4 text-lg font-semibold">Envie seu material de estudo</h2>
-          <p className="mx-auto mt-2 max-w-sm text-sm text-muted-foreground">
-            PDF com texto selecionável, até 20 MB. O Sentinela lê o conteúdo e identifica os
-            assuntos.
-          </p>
-          <Button className="mt-6" disabled={busy} onClick={() => fileRef.current?.click()}>
-            <Upload className="size-4" />
-            Escolher PDF
-          </Button>
+        <div className="mt-6 space-y-6">
+          <div className="flex rounded-lg bg-muted/40 p-1 border border-border">
+            <button
+              type="button"
+              onClick={() => setUploadMode("new_pdf")}
+              className={`flex flex-1 items-center justify-center gap-2 rounded-md py-2.5 text-sm font-medium transition-colors ${
+                uploadMode === "new_pdf" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Upload className="size-4" />
+              Anexar Novo PDF
+            </button>
+            <button
+              type="button"
+              onClick={() => setUploadMode("library")}
+              className={`flex flex-1 items-center justify-center gap-2 rounded-md py-2.5 text-sm font-medium transition-colors ${
+                uploadMode === "library" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Library className="size-4" />
+              Escolher da Minha Biblioteca
+            </button>
+          </div>
+
+          {uploadMode === "new_pdf" && (
+            <div className="card-surface p-8 text-center">
+              <Upload className="mx-auto size-8 text-primary" />
+              <h2 className="mt-4 text-lg font-semibold">Envie seu material de estudo</h2>
+              <p className="mx-auto mt-2 max-w-sm text-sm text-muted-foreground">
+                PDF com texto selecionável, até 20 MB. A Sentinela identifica a estrutura, concurso, disciplina e tópicos.
+              </p>
+              <Button className="mt-6 gap-2" disabled={busy} onClick={() => fileRef.current?.click()}>
+                <Upload className="size-4" />
+                Escolher PDF
+              </Button>
+            </div>
+          )}
+
+          {uploadMode === "library" && (
+            <div className="space-y-4">
+              <div className="card-surface p-5">
+                <h3 className="text-base font-semibold">Selecione o conteúdo para a Sentinela</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Escolha um assunto inteiro ou clique no tópico específico que deseja explicar agora.
+                </p>
+              </div>
+
+              {Object.keys(libraryGrouped).length === 0 && (
+                <div className="card-surface p-8 text-center">
+                  <Library className="mx-auto size-8 text-muted-foreground" />
+                  <p className="mt-3 text-sm text-muted-foreground">
+                    Você ainda não possui materiais cadastrados na biblioteca.
+                  </p>
+                  <Button className="mt-4" onClick={() => setUploadMode("new_pdf")}>
+                    Enviar primeiro PDF
+                  </Button>
+                </div>
+              )}
+
+              {Object.entries(libraryGrouped).map(([groupName, mats]) => (
+                <div key={groupName} className="card-surface p-0 overflow-hidden border border-border/80">
+                  <div className="flex items-center gap-2 border-b border-border/60 bg-muted/20 px-4 py-3">
+                    <Folder className="size-4 text-primary" />
+                    <h4 className="text-sm font-bold text-foreground">{groupName}</h4>
+                  </div>
+                  <div className="divide-y divide-border/40 p-4 space-y-4">
+                    {mats.map((mat) => (
+                      <div key={mat.id} className="pt-2 first:pt-0 space-y-2">
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-xs text-foreground">
+                            🌐 {mat.nome}
+                          </span>
+                          {mat.disciplina && mat.disciplina !== "Geral" && (
+                            <span className="rounded bg-elevated px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                              {mat.disciplina}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap gap-1.5 pl-3 border-l-2 border-primary/20">
+                          {(mat.topics ?? []).map((topic: any) => (
+                            <button
+                              key={topic.id}
+                              type="button"
+                              onClick={() => {
+                                setTopicId(topic.id);
+                                setTopicName(topic.nome);
+                                setPreviousExplanationId(null);
+                                question.mutate(topic.id);
+                              }}
+                              className="flex items-center gap-1 rounded-md border border-border bg-card px-2.5 py-1 text-xs font-medium hover:border-primary hover:text-primary transition-colors"
+                            >
+                              <Sparkles className="size-3 text-primary" />
+                              {topic.nome}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Step 2: Structure and Grouping Configuration */}
+      {step === "structure" && (
+        <div className="mt-6 space-y-6">
+          <div className="card-surface p-6">
+            <div className="flex items-center gap-2 text-primary">
+              <Sparkles className="size-5" />
+              <h2 className="text-lg font-semibold">Estrutura e Agrupamento do Material</h2>
+            </div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              A Sentinela identificou a estrutura abaixo. Você pode editar o grupo, concurso, disciplina, renomear, excluir ou adicionar novos tópicos.
+            </p>
+
+            {/* Group, Contest, Discipline, Subject Inputs */}
+            <div className="mt-6 grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="grupo" className="flex items-center gap-1.5 text-xs font-semibold">
+                  <Folder className="size-3.5 text-primary" />
+                  Nome do Grupo / Pasta
+                </Label>
+                <Input
+                  id="grupo"
+                  value={structure.grupo}
+                  onChange={(e) => setStructure((prev) => ({ ...prev, grupo: e.target.value }))}
+                  placeholder="Ex: Concurso PMBA, Faculdade, OAB..."
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="concurso" className="flex items-center gap-1.5 text-xs font-semibold">
+                  <GraduationCap className="size-3.5 text-primary" />
+                  Concurso / Exame
+                </Label>
+                <Input
+                  id="concurso"
+                  value={structure.concurso}
+                  onChange={(e) => setStructure((prev) => ({ ...prev, concurso: e.target.value }))}
+                  placeholder="Ex: PMBA, PF, PRF, ENEM..."
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="disciplina" className="flex items-center gap-1.5 text-xs font-semibold">
+                  <BookOpen className="size-3.5 text-primary" />
+                  Disciplina
+                </Label>
+                <Input
+                  id="disciplina"
+                  value={structure.disciplina}
+                  onChange={(e) => setStructure((prev) => ({ ...prev, disciplina: e.target.value }))}
+                  placeholder="Ex: Informática, Direito Constitucional..."
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="assunto" className="flex items-center gap-1.5 text-xs font-semibold">
+                  <Layers className="size-3.5 text-primary" />
+                  Assunto Principal
+                </Label>
+                <Input
+                  id="assunto"
+                  value={structure.assunto}
+                  onChange={(e) => setStructure((prev) => ({ ...prev, assunto: e.target.value }))}
+                  placeholder="Ex: Redes de Computadores, Atos Administrativos..."
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Topics Identified by Sentinela */}
+          <div className="card-surface p-6">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h3 className="text-base font-semibold">Tópicos e Subtópicos Identificados</h3>
+                <p className="text-xs text-muted-foreground">
+                  Marque os tópicos que deseja utilizar agora. Você pode renomear ou excluir itens.
+                </p>
+              </div>
+              <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
+                {structure.topics.filter((t) => t.selected).length} de {structure.topics.length} selecionados
+              </span>
+            </div>
+
+            <div className="mt-4 space-y-3">
+              {structure.topics.map((t) => (
+                <div
+                  key={t.tempId}
+                  className={`flex items-start gap-3 rounded-lg border p-3.5 transition-colors ${
+                    t.selected ? "border-primary/40 bg-card" : "border-border/60 bg-muted/20 opacity-70"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={t.selected}
+                    onChange={() => toggleTopicSelection(t.tempId)}
+                    className="mt-1 size-4 rounded border-border text-primary focus:ring-primary"
+                  />
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <Input
+                      value={t.nome}
+                      onChange={(e) => updateTopicName(t.tempId, e.target.value)}
+                      className="h-8 text-sm font-medium"
+                    />
+                    {t.descricao && (
+                      <p className="text-xs text-muted-foreground line-clamp-1">{t.descricao}</p>
+                    )}
+                    {t.conceitos_principais && t.conceitos_principais.length > 0 && (
+                      <div className="flex flex-wrap gap-1 pt-1">
+                        {t.conceitos_principais.map((c, i) => (
+                          <span
+                            key={i}
+                            className="rounded bg-elevated px-1.5 py-0.5 text-[10px] text-muted-foreground"
+                          >
+                            {c}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => deleteTopic(t.tempId)}
+                    className="size-8 text-muted-foreground hover:text-error hover:bg-error/10 shrink-0"
+                    title="Remover este tópico"
+                  >
+                    <Trash2 className="size-4" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+
+            {/* Add new custom topic */}
+            <div className="mt-4 flex gap-2">
+              <Input
+                placeholder="Digitar novo tópico personalizado..."
+                value={newTopicName}
+                onChange={(e) => setNewTopicName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    addNewTopic();
+                  }
+                }}
+                className="h-9 text-sm"
+              />
+              <Button variant="secondary" size="sm" onClick={addNewTopic} className="gap-1 shrink-0">
+                <Plus className="size-4" />
+                Adicionar Tópico
+              </Button>
+            </div>
+          </div>
+
+          {/* Hierarchy preview */}
+          <div className="card-surface border-dashed p-5">
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Estrutura Final Organizada:
+            </h4>
+            <div className="mt-3 font-mono text-xs space-y-1 text-foreground">
+              <p className="font-semibold text-primary">📁 {structure.grupo || "Sem grupo"} ({structure.concurso || "Geral"})</p>
+              <p className="pl-4 text-muted-foreground">└── 📘 {structure.disciplina || "Geral"} → {structure.assunto || "Assunto"}</p>
+              {structure.topics.filter((t) => t.selected).map((t, idx) => (
+                <p key={idx} className="pl-8 text-xs text-foreground">
+                  ├── ☑ {t.nome}
+                </p>
+              ))}
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            <Button variant="ghost" onClick={handleRemoveFile} disabled={busy}>
+              Cancelar e Escolher Outro PDF
+            </Button>
+            <Button
+              disabled={busy || structure.topics.filter((t) => t.selected).length === 0}
+              onClick={() => confirmStructure.mutate()}
+              className="gap-2 px-6"
+            >
+              <Check className="size-4" />
+              Confirmar Estrutura e Iniciar Estudo
+            </Button>
+          </div>
         </div>
       )}
 
       {step === "topics" && (
         <div className="mt-6">
-          <h2 className="text-lg font-semibold">Assuntos identificados</h2>
+          <h2 className="text-lg font-semibold">Escolha o assunto para explicar</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Escolha o que você quer explicar agora.
+            A Sentinela irá formular uma pergunta aberta e desafiadora sobre o assunto selecionado.
           </p>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             {topics.map((topic) => (
@@ -517,6 +938,7 @@ function StudyPage() {
 
 const STEP_LABELS: Array<{ key: Step; label: string }> = [
   { key: "upload", label: "Material" },
+  { key: "structure", label: "Estrutura & Grupo" },
   { key: "topics", label: "Assunto" },
   { key: "question", label: "Explicação" },
   { key: "review", label: "Transcrição" },

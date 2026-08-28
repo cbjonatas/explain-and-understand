@@ -99,16 +99,34 @@ export async function transcribeAudioFile(file: Blob, filename: string): Promise
   return text;
 }
 
-export const TOPICS_SYSTEM = `Você é o motor de análise de material do SENTINELA, uma ferramenta de estudo em português do Brasil.
-Receberá o texto extraído de um PDF de estudo. Identifique os assuntos ensináveis do material.
+export const TOPICS_SYSTEM = `Você é o motor de análise de material e organização pedagógica do SENTINELA, em português do Brasil.
+Receberá o texto extraído de um material de estudo em PDF.
+Analise o conteúdo e identifique a estrutura completa do material:
+1. Concurso ou exame sugerido (ex: "PMBA", "PF", "PRF", "OAB", "ENEM" ou "Geral" se não for específico);
+2. Disciplina (ex: "Informática", "Direito Constitucional", "Língua Portuguesa", "Matemática");
+3. Assunto principal (ex: "Redes de Computadores", "Atos Administrativos", "Sintaxe");
+4. Grupo sugerido (ex: "Concurso PMBA", "Direito Constitucional - OAB", "Estudos Gerais");
+5. Tópicos e subtópicos ensináveis presentes no material (de 4 a 10 tópicos principais).
+
 Responda SOMENTE com JSON no formato:
-{"topics":[{"nome":"...","descricao":"...","conceitos_principais":["..."]}]}
+{
+  "grupo": "...",
+  "concurso": "...",
+  "disciplina": "...",
+  "assunto": "...",
+  "topics": [
+    {
+      "nome": "...",
+      "descricao": "1 frase explicando o que o material aborda sobre este tópico",
+      "conceitos_principais": ["conceito 1", "conceito 2", "conceito 3"]
+    }
+  ]
+}
+
 Regras:
-- entre 4 e 10 assuntos, os mais relevantes e realmente presentes no material;
-- "nome" curto (até 40 caracteres), sem numeração;
-- "descricao" com 1 frase explicando o que o material diz sobre o assunto;
-- "conceitos_principais": 3 a 8 conceitos, definições ou relações que uma boa explicação do assunto precisa conter;
-- nunca invente assuntos ausentes do material.`;
+- "nome": título conciso e claro do tópico (até 50 caracteres), sem numeração;
+- "conceitos_principais": 3 a 8 termos, regras ou definições que o aluno precisa saber para explicar bem o tópico;
+- Seja fiel ao material fornecido, identificando a real estrutura de estudo.`;
 
 export const QUESTION_SYSTEM = `Você é o SENTINELA, em português do Brasil.
 Crie UMA pergunta que obrigue o estudante a explicar o assunto com as próprias palavras, cobrindo função, definição e consequências/relações — nunca uma pergunta de resposta curta ou de decorar termo.
