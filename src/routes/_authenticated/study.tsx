@@ -80,6 +80,7 @@ function StudyPage() {
       setProgress(null);
       setTopics(data.topics);
       setStep("topics");
+      toast.success("PDF processado com sucesso! Escolha um assunto para começar.");
     },
     onError: (error) => {
       setProgress(null);
