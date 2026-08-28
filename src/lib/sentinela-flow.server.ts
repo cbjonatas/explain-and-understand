@@ -192,6 +192,40 @@ export async function processMaterialFlow(
   return { materialId: material.id as string, topics: inserted as TopicSummary[] };
 }
 
+async function getAggregatedSubjectText(
+  supabase: Db,
+  materialId: string,
+  initialText: string,
+): Promise<string> {
+  try {
+    const { data: currentMat } = await supabase
+      .from("study_materials")
+      .select("nome, grupo")
+      .eq("id", materialId)
+      .single();
+
+    if (!currentMat?.nome) return initialText;
+
+    let query = supabase
+      .from("study_materials")
+      .select("texto_extraido")
+      .eq("nome", currentMat.nome);
+
+    if (currentMat.grupo) {
+      query = query.eq("grupo", currentMat.grupo);
+    }
+
+    const { data: siblings } = await query;
+    if (siblings && siblings.length > 1) {
+      const texts = siblings.map((s) => s.texto_extraido).filter(Boolean);
+      if (texts.length > 0) return texts.join("\n\n---\n\n");
+    }
+  } catch (err) {
+    console.warn("Aviso ao agregar materiais do mesmo assunto:", err);
+  }
+  return initialText;
+}
+
 export async function generateQuestionFlow(supabase: Db, topicId: string) {
   const { data: topic, error } = await supabase
     .from("topics")
@@ -200,7 +234,8 @@ export async function generateQuestionFlow(supabase: Db, topicId: string) {
     .single();
   if (error || !topic) throw new AiError(404, "Assunto não encontrado.");
 
-  const materialText = (topic as any).study_materials?.texto_extraido ?? "";
+  const rawText = (topic as any).study_materials?.texto_extraido ?? "";
+  const materialText = await getAggregatedSubjectText(supabase, topic.material_id, rawText);
   const trecho = relevantMaterial(materialText, topic.nome, topic.conceitos_principais ?? []);
 
   const parsed = await callAiJson<{ pergunta?: string }>(
@@ -247,7 +282,8 @@ export async function evaluateFlow(
     .single();
   if (topicError || !topic) throw new AiError(404, "Assunto não encontrado.");
 
-  const materialText = (topic as any).study_materials?.texto_extraido ?? "";
+  const rawText = (topic as any).study_materials?.texto_extraido ?? "";
+  const materialText = await getAggregatedSubjectText(supabase, topic.material_id, rawText);
   const trecho = relevantMaterial(materialText, topic.nome, topic.conceitos_principais ?? []);
 
   let previous: { score: number | null; transcription: string | null; attempt: number } | null = null;

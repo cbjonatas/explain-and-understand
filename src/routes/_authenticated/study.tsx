@@ -6,10 +6,12 @@ import {
   BookOpen,
   Check,
   ChevronRight,
+  Edit3,
   ExternalLink,
   FileText,
   Folder,
   FolderOpen,
+  FolderPlus,
   GraduationCap,
   Layers,
   Library,
@@ -34,6 +36,7 @@ import { AppShell } from "@/components/sentinela/Shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
 import { formatTime, MAX_RECORDING_SECONDS, useRecorder } from "@/hooks/useRecorder";
 import { useAuth } from "@/hooks/useAuth";
@@ -88,6 +91,12 @@ function StudyPage() {
   const [uploadMode, setUploadMode] = useState<"new_pdf" | "library">("new_pdf");
   const [attachedFile, setAttachedFile] = useState<AttachedFile | null>(null);
 
+  // Grouping choice: "new_group" | "existing_group"
+  const [groupChoice, setGroupChoice] = useState<"new_group" | "existing_group">("new_group");
+  const [selectedExistingGroup, setSelectedExistingGroup] = useState<string>("");
+  const [subjectChoice, setSubjectChoice] = useState<"auto" | "existing_subject" | "new_subject">("auto");
+  const [selectedExistingSubject, setSelectedExistingSubject] = useState<string>("");
+
   // Grouping & Structure state
   const [structure, setStructure] = useState<MaterialStructure>({
     grupo: "",
@@ -117,10 +126,10 @@ function StudyPage() {
   const runTranscribe = useServerFn(transcribeExplanation);
   const runEvaluate = useServerFn(evaluateExplanation);
 
-  // Fetch library materials for existing selection
+  // Fetch library materials for existing groups & subjects
   const libraryQuery = useQuery({
-    queryKey: ["library-materials", user?.id],
-    enabled: !!user && step === "upload",
+    queryKey: ["library-materials-all", user?.id],
+    enabled: !!user,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("study_materials")
@@ -130,6 +139,24 @@ function StudyPage() {
       return data ?? [];
     },
   });
+
+  // Extract unique groups and subjects per group
+  const existingGroupsMap: Record<string, { concurso: string; subjects: string[] }> = {};
+  for (const m of libraryQuery.data ?? []) {
+    const g = (m as any).grupo?.trim() || "Geral";
+    if (!existingGroupsMap[g]) {
+      existingGroupsMap[g] = {
+        concurso: (m as any).concurso?.trim() || "Geral",
+        subjects: [],
+      };
+    }
+    const subj = m.nome?.trim();
+    if (subj && !existingGroupsMap[g].subjects.includes(subj)) {
+      existingGroupsMap[g].subjects.push(subj);
+    }
+  }
+
+  const existingGroupNames = Object.keys(existingGroupsMap);
 
   // Clean up blob URL on unmount or file reset
   useEffect(() => {
@@ -164,8 +191,22 @@ function StudyPage() {
     onSuccess: (data) => {
       setProgress(null);
       setStructure(data);
+
+      // If user has existing groups and suggested group matches or we have groups, set options
+      if (existingGroupNames.length > 0) {
+        const match = existingGroupNames.find(
+          (g) => g.toLowerCase() === data.grupo.toLowerCase() || g.toLowerCase().includes(data.concurso.toLowerCase()),
+        );
+        if (match) {
+          setGroupChoice("existing_group");
+          setSelectedExistingGroup(match);
+        } else {
+          setGroupChoice("new_group");
+        }
+      }
+
       setStep("structure");
-      toast.success("Estrutura identificada pela Sentinela! Confira e personalize como desejar.");
+      toast.success("Estrutura identificada pela Sentinela! Confira onde deseja organizar.");
     },
     onError: (error) => {
       setProgress(null);
@@ -181,17 +222,27 @@ function StudyPage() {
         throw new Error("Selecione pelo menos um tópico para estudar.");
       }
 
+      const finalGroup =
+        groupChoice === "existing_group" && selectedExistingGroup
+          ? selectedExistingGroup
+          : structure.grupo.trim() || "Geral";
+
+      const finalSubject =
+        subjectChoice === "existing_subject" && selectedExistingSubject
+          ? selectedExistingSubject
+          : structure.assunto.trim() || attachedFile.name.replace(/\.pdf$/i, "");
+
       setProgress("Salvando a organização do material...");
       const response = await runSaveStructure({
         data: {
-          nome: structure.assunto.trim() || attachedFile.name.replace(/\.pdf$/i, ""),
-          arquivo: null,
+          nome: finalSubject,
+          arquivo: attachedFile.name,
           paginas: attachedFile.pages,
           texto: attachedFile.text,
-          grupo: structure.grupo,
+          grupo: finalGroup,
           concurso: structure.concurso,
           disciplina: structure.disciplina,
-          assunto: structure.assunto,
+          assunto: finalSubject,
           topics: selectedTopics.map((t) => ({
             nome: t.nome.trim(),
             descricao: t.descricao,
@@ -376,16 +427,6 @@ function StudyPage() {
     toast.success("Novo tópico adicionado!");
   }
 
-  // Grouping for library materials selection
-  const libraryGrouped: Record<string, any[]> = {};
-  for (const m of libraryQuery.data ?? []) {
-    const g = (m as any).grupo?.trim() || "Geral / Sem Grupo";
-    if (!libraryGrouped[g]) {
-      libraryGrouped[g] = [];
-    }
-    libraryGrouped[g].push(m);
-  }
-
   return (
     <AppShell>
       <StepHeader step={step} />
@@ -525,7 +566,7 @@ function StudyPage() {
                 </p>
               </div>
 
-              {Object.keys(libraryGrouped).length === 0 && (
+              {existingGroupNames.length === 0 && (
                 <div className="card-surface p-8 text-center">
                   <Library className="mx-auto size-8 text-muted-foreground" />
                   <p className="mt-3 text-sm text-muted-foreground">
@@ -537,48 +578,53 @@ function StudyPage() {
                 </div>
               )}
 
-              {Object.entries(libraryGrouped).map(([groupName, mats]) => (
-                <div key={groupName} className="card-surface p-0 overflow-hidden border border-border/80">
-                  <div className="flex items-center gap-2 border-b border-border/60 bg-muted/20 px-4 py-3">
-                    <Folder className="size-4 text-primary" />
-                    <h4 className="text-sm font-bold text-foreground">{groupName}</h4>
-                  </div>
-                  <div className="divide-y divide-border/40 p-4 space-y-4">
-                    {mats.map((mat) => (
-                      <div key={mat.id} className="pt-2 first:pt-0 space-y-2">
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold text-xs text-foreground">
-                            🌐 {mat.nome}
-                          </span>
-                          {mat.disciplina && mat.disciplina !== "Geral" && (
-                            <span className="rounded bg-elevated px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                              {mat.disciplina}
+              {existingGroupNames.map((gName) => {
+                const groupInfo = existingGroupsMap[gName];
+                const matsInGroup = (libraryQuery.data ?? []).filter((m: any) => (m.grupo?.trim() || "Geral") === gName);
+
+                return (
+                  <div key={gName} className="card-surface p-0 overflow-hidden border border-border/80">
+                    <div className="flex items-center gap-2 border-b border-border/60 bg-muted/20 px-4 py-3">
+                      <Folder className="size-4 text-primary" />
+                      <h4 className="text-sm font-bold text-foreground uppercase">{gName}</h4>
+                    </div>
+                    <div className="divide-y divide-border/40 p-4 space-y-4">
+                      {matsInGroup.map((mat: any) => (
+                        <div key={mat.id} className="pt-2 first:pt-0 space-y-2">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-xs text-foreground">
+                              🌐 {mat.nome}
                             </span>
-                          )}
+                            {mat.disciplina && mat.disciplina !== "Geral" && (
+                              <span className="rounded bg-elevated px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                                {mat.disciplina}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex flex-wrap gap-1.5 pl-3 border-l-2 border-primary/20">
+                            {(mat.topics ?? []).map((topic: any) => (
+                              <button
+                                key={topic.id}
+                                type="button"
+                                onClick={() => {
+                                  setTopicId(topic.id);
+                                  setTopicName(topic.nome);
+                                  setPreviousExplanationId(null);
+                                  question.mutate(topic.id);
+                                }}
+                                className="flex items-center gap-1 rounded-md border border-border bg-card px-2.5 py-1 text-xs font-medium hover:border-primary hover:text-primary transition-colors"
+                              >
+                                <Sparkles className="size-3 text-primary" />
+                                {topic.nome}
+                              </button>
+                            ))}
+                          </div>
                         </div>
-                        <div className="flex flex-wrap gap-1.5 pl-3 border-l-2 border-primary/20">
-                          {(mat.topics ?? []).map((topic: any) => (
-                            <button
-                              key={topic.id}
-                              type="button"
-                              onClick={() => {
-                                setTopicId(topic.id);
-                                setTopicName(topic.nome);
-                                setPreviousExplanationId(null);
-                                question.mutate(topic.id);
-                              }}
-                              className="flex items-center gap-1 rounded-md border border-border bg-card px-2.5 py-1 text-xs font-medium hover:border-primary hover:text-primary transition-colors"
-                            >
-                              <Sparkles className="size-3 text-primary" />
-                              {topic.nome}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -587,40 +633,168 @@ function StudyPage() {
       {/* Step 2: Structure and Grouping Configuration */}
       {step === "structure" && (
         <div className="mt-6 space-y-6">
-          <div className="card-surface p-6">
-            <div className="flex items-center gap-2 text-primary">
-              <Sparkles className="size-5" />
-              <h2 className="text-lg font-semibold">Estrutura e Agrupamento do Material</h2>
+          {/* Smart Sentinela Suggestion Alert */}
+          <div className="card-surface border-primary/40 bg-primary/5 p-5">
+            <div className="flex items-start gap-3">
+              <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary shrink-0">
+                <Sparkles className="size-5" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-sm font-bold text-foreground">
+                  Identificação Automática da Sentinela
+                </h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Identificamos este conteúdo como <strong>{structure.assunto || "Assunto identificado"}</strong> para o grupo <strong>{structure.grupo || "Grupo sugerido"}</strong> ({structure.concurso || "Geral"}).
+                </p>
+                <p className="text-xs text-foreground font-medium pt-1">
+                  Deseja organizar este material com essa estrutura ou personalizar?
+                </p>
+              </div>
             </div>
-            <p className="mt-1 text-sm text-muted-foreground">
-              A Sentinela identificou a estrutura abaixo. Você pode editar o grupo, concurso, disciplina, renomear, excluir ou adicionar novos tópicos.
-            </p>
+          </div>
 
-            {/* Group, Contest, Discipline, Subject Inputs */}
-            <div className="mt-6 grid gap-4 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label htmlFor="grupo" className="flex items-center gap-1.5 text-xs font-semibold">
-                  <Folder className="size-3.5 text-primary" />
-                  Nome do Grupo / Pasta
-                </Label>
-                <Input
-                  id="grupo"
-                  value={structure.grupo}
-                  onChange={(e) => setStructure((prev) => ({ ...prev, grupo: e.target.value }))}
-                  placeholder="Ex: Concurso PMBA, Faculdade, OAB..."
-                />
+          {/* Section 4: "Onde deseja organizar este material?" */}
+          <div className="card-surface p-6 space-y-5">
+            <div>
+              <h3 className="text-base font-bold text-foreground">
+                📁 Onde deseja organizar este material?
+              </h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Escolha se deseja criar um novo grupo ou vincular a um grupo existente da sua biblioteca.
+              </p>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div
+                onClick={() => setGroupChoice("new_group")}
+                className={`cursor-pointer rounded-lg border p-4 transition-all ${
+                  groupChoice === "new_group"
+                    ? "border-primary bg-primary/5 ring-1 ring-primary/40"
+                    : "border-border hover:border-border/80"
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="groupChoice"
+                    checked={groupChoice === "new_group"}
+                    onChange={() => setGroupChoice("new_group")}
+                    className="text-primary"
+                  />
+                  <span className="text-sm font-semibold">Criar novo grupo</span>
+                </div>
+                <p className="text-xs text-muted-foreground mt-2 pl-6">
+                  Defina um novo grupo exclusivo (ex: GRUPO PMBA, GRUPO PCBA, GRUPO PF).
+                </p>
               </div>
 
+              <div
+                onClick={() => {
+                  setGroupChoice("existing_group");
+                  if (!selectedExistingGroup && existingGroupNames.length > 0) {
+                    setSelectedExistingGroup(existingGroupNames[0]);
+                  }
+                }}
+                className={`cursor-pointer rounded-lg border p-4 transition-all ${
+                  groupChoice === "existing_group"
+                    ? "border-primary bg-primary/5 ring-1 ring-primary/40"
+                    : "border-border hover:border-border/80"
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="groupChoice"
+                    checked={groupChoice === "existing_group"}
+                    onChange={() => {
+                      setGroupChoice("existing_group");
+                      if (!selectedExistingGroup && existingGroupNames.length > 0) {
+                        setSelectedExistingGroup(existingGroupNames[0]);
+                      }
+                    }}
+                    className="text-primary"
+                  />
+                  <span className="text-sm font-semibold">Adicionar a um grupo existente</span>
+                </div>
+                <p className="text-xs text-muted-foreground mt-2 pl-6">
+                  Vincular aos grupos já criados na sua biblioteca de estudos.
+                </p>
+              </div>
+            </div>
+
+            {/* Inputs based on choice */}
+            {groupChoice === "new_group" ? (
+              <div className="grid gap-4 sm:grid-cols-2 pt-2 border-t border-border/50">
+                <div className="space-y-1.5">
+                  <Label htmlFor="grupo" className="flex items-center gap-1.5 text-xs font-semibold">
+                    <Folder className="size-3.5 text-primary" />
+                    Nome do Novo Grupo
+                  </Label>
+                  <Input
+                    id="grupo"
+                    value={structure.grupo}
+                    onChange={(e) => setStructure((prev) => ({ ...prev, grupo: e.target.value }))}
+                    placeholder="Ex: GRUPO PMBA, GRUPO PCBA, GRUPO PF..."
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="concurso" className="flex items-center gap-1.5 text-xs font-semibold">
+                    <GraduationCap className="size-3.5 text-primary" />
+                    Concurso / Exame
+                  </Label>
+                  <Input
+                    id="concurso"
+                    value={structure.concurso}
+                    onChange={(e) => setStructure((prev) => ({ ...prev, concurso: e.target.value }))}
+                    placeholder="Ex: PMBA, PCBA, PF, PRF, ENEM..."
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3 pt-2 border-t border-border/50">
+                <Label className="flex items-center gap-1.5 text-xs font-semibold">
+                  <FolderOpen className="size-3.5 text-primary" />
+                  Selecione o Grupo Existente:
+                </Label>
+                {existingGroupNames.length === 0 ? (
+                  <p className="text-xs text-muted-foreground italic">
+                    Nenhum grupo pré-existente. Crie seu primeiro grupo acima.
+                  </p>
+                ) : (
+                  <div className="grid gap-2 sm:grid-cols-3">
+                    {existingGroupNames.map((g) => (
+                      <button
+                        key={g}
+                        type="button"
+                        onClick={() => setSelectedExistingGroup(g)}
+                        className={`flex items-center gap-2 rounded-md border p-3 text-left text-xs font-medium transition-all ${
+                          selectedExistingGroup === g
+                            ? "border-primary bg-primary/10 text-primary font-semibold ring-1 ring-primary/30"
+                            : "border-border bg-card hover:border-primary/50"
+                        }`}
+                      >
+                        <Folder className="size-4 text-primary shrink-0" />
+                        <span className="truncate">{g}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Subject and Discipline Inputs */}
+            <div className="grid gap-4 sm:grid-cols-2 pt-2 border-t border-border/50">
               <div className="space-y-1.5">
-                <Label htmlFor="concurso" className="flex items-center gap-1.5 text-xs font-semibold">
-                  <GraduationCap className="size-3.5 text-primary" />
-                  Concurso / Exame
+                <Label htmlFor="assunto" className="flex items-center gap-1.5 text-xs font-semibold">
+                  <Layers className="size-3.5 text-primary" />
+                  Assunto Identificado / Nome do Módulo
                 </Label>
                 <Input
-                  id="concurso"
-                  value={structure.concurso}
-                  onChange={(e) => setStructure((prev) => ({ ...prev, concurso: e.target.value }))}
-                  placeholder="Ex: PMBA, PF, PRF, ENEM..."
+                  id="assunto"
+                  value={structure.assunto}
+                  onChange={(e) => setStructure((prev) => ({ ...prev, assunto: e.target.value }))}
+                  placeholder="Ex: Redes de Computadores, Atos Administrativos..."
                 />
               </div>
 
@@ -636,19 +810,6 @@ function StudyPage() {
                   placeholder="Ex: Informática, Direito Constitucional..."
                 />
               </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="assunto" className="flex items-center gap-1.5 text-xs font-semibold">
-                  <Layers className="size-3.5 text-primary" />
-                  Assunto Principal
-                </Label>
-                <Input
-                  id="assunto"
-                  value={structure.assunto}
-                  onChange={(e) => setStructure((prev) => ({ ...prev, assunto: e.target.value }))}
-                  placeholder="Ex: Redes de Computadores, Atos Administrativos..."
-                />
-              </div>
             </div>
           </div>
 
@@ -658,7 +819,7 @@ function StudyPage() {
               <div>
                 <h3 className="text-base font-semibold">Tópicos e Subtópicos Identificados</h3>
                 <p className="text-xs text-muted-foreground">
-                  Marque os tópicos que deseja utilizar agora. Você pode renomear ou excluir itens.
+                  Marque os tópicos que deseja utilizar agora. Você pode renomear, excluir ou adicionar novos.
                 </p>
               </div>
               <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
@@ -739,14 +900,21 @@ function StudyPage() {
           {/* Hierarchy preview */}
           <div className="card-surface border-dashed p-5">
             <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Estrutura Final Organizada:
+              Estrutura Final na Biblioteca:
             </h4>
             <div className="mt-3 font-mono text-xs space-y-1 text-foreground">
-              <p className="font-semibold text-primary">📁 {structure.grupo || "Sem grupo"} ({structure.concurso || "Geral"})</p>
-              <p className="pl-4 text-muted-foreground">└── 📘 {structure.disciplina || "Geral"} → {structure.assunto || "Assunto"}</p>
+              <p className="font-semibold text-primary">
+                📁 {groupChoice === "existing_group" && selectedExistingGroup ? selectedExistingGroup : structure.grupo || "Sem grupo"}
+              </p>
+              <p className="pl-4 text-muted-foreground">
+                └── 🌐 {structure.assunto || "Assunto"} ({structure.disciplina || "Geral"})
+              </p>
+              <p className="pl-8 text-xs text-muted-foreground">
+                ├── 📄 {attachedFile?.name} ({attachedFile?.pages} pág.)
+              </p>
               {structure.topics.filter((t) => t.selected).map((t, idx) => (
                 <p key={idx} className="pl-8 text-xs text-foreground">
-                  ├── ☑ {t.nome}
+                  ├── 🏷️ Tópico: {t.nome}
                 </p>
               ))}
             </div>
@@ -763,7 +931,7 @@ function StudyPage() {
               className="gap-2 px-6"
             >
               <Check className="size-4" />
-              Confirmar Estrutura e Iniciar Estudo
+              Confirmar e Iniciar Estudo
             </Button>
           </div>
         </div>
