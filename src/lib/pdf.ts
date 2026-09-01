@@ -121,7 +121,6 @@ export async function extractPdfText(file: File): Promise<PdfExtraction> {
     data: uint8Data,
     cMapPacked: true,
     useWorkerFetch: false,
-    isEvalSupported: false,
     useSystemFonts: true,
   });
 
