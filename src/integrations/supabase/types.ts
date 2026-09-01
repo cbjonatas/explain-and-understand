@@ -174,6 +174,60 @@ export type Database = {
           },
         ]
       }
+      language_profiles: {
+        Row: {
+          created_at: string
+          destaques: string | null
+          editado_manualmente: boolean
+          estrutura: string | null
+          exemplos_analisados: number
+          exemplos_analogias: string | null
+          forma_explicar: string | null
+          metodologia: string | null
+          organizacao_materiais: string | null
+          questoes_comentadas: string | null
+          resumo: string | null
+          tom: string | null
+          updated_at: string
+          user_id: string
+          vocabulario: string | null
+        }
+        Insert: {
+          created_at?: string
+          destaques?: string | null
+          editado_manualmente?: boolean
+          estrutura?: string | null
+          exemplos_analisados?: number
+          exemplos_analogias?: string | null
+          forma_explicar?: string | null
+          metodologia?: string | null
+          organizacao_materiais?: string | null
+          questoes_comentadas?: string | null
+          resumo?: string | null
+          tom?: string | null
+          updated_at?: string
+          user_id: string
+          vocabulario?: string | null
+        }
+        Update: {
+          created_at?: string
+          destaques?: string | null
+          editado_manualmente?: boolean
+          estrutura?: string | null
+          exemplos_analisados?: number
+          exemplos_analogias?: string | null
+          forma_explicar?: string | null
+          metodologia?: string | null
+          organizacao_materiais?: string | null
+          questoes_comentadas?: string | null
+          resumo?: string | null
+          tom?: string | null
+          updated_at?: string
+          user_id?: string
+          vocabulario?: string | null
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string
@@ -271,6 +325,48 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      training_examples: {
+        Row: {
+          arquivo: string | null
+          ativo: boolean
+          categoria: string
+          created_at: string
+          id: string
+          origem: string
+          quantidade_paginas: number | null
+          texto: string
+          titulo: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          arquivo?: string | null
+          ativo?: boolean
+          categoria: string
+          created_at?: string
+          id?: string
+          origem?: string
+          quantidade_paginas?: number | null
+          texto?: string
+          titulo: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          arquivo?: string | null
+          ativo?: boolean
+          categoria?: string
+          created_at?: string
+          id?: string
+          origem?: string
+          quantidade_paginas?: number | null
+          texto?: string
+          titulo?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
     }
     Views: {
