@@ -35,10 +35,10 @@ export async function analyzeMaterialStructureFlow(
   }
 
   const parsed = await callAiJson<{
-    grupo?: string;
-    concurso?: string;
-    disciplina?: string;
-    assunto?: string;
+    grupo?: string | undefined;
+    concurso?: string | undefined;
+    disciplina?: string | undefined;
+    assunto?: string | undefined;
     topics?: Array<{ nome?: string; descricao?: string; conceitos_principais?: string[] }>;
   }>(TOPICS_SYSTEM, `Texto do material "${data.nome}":\n\n${texto.slice(0, 90000)}`);
 
@@ -75,10 +75,10 @@ export async function saveCustomMaterialStructureFlow(
     arquivo: string | null;
     paginas: number;
     texto: string;
-    grupo?: string;
-    concurso?: string;
-    disciplina?: string;
-    assunto?: string;
+    grupo?: string | undefined;
+    concurso?: string | undefined;
+    disciplina?: string | undefined;
+    assunto?: string | undefined;
     topics: Array<{ nome: string; descricao: string | null; conceitos_principais: string[] }>;
   },
 ) {
