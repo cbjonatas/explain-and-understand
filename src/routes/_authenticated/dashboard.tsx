@@ -674,7 +674,7 @@ function Dashboard() {
                               className="h-7 text-xs gap-1 text-muted-foreground hover:text-primary"
                               onClick={() =>
                                 setAddTopicTarget({
-                                  materialId: subject.materialIds[0],
+                                  materialId: subject.materialIds[0] ?? "",
                                   subjectName: subject.subjectName,
                                 })
                               }
