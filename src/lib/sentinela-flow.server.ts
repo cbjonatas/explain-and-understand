@@ -96,9 +96,9 @@ export async function saveCustomMaterialStructureFlow(
     quantidade_paginas: data.paginas,
     texto_extraido: texto.slice(0, 400000),
   };
-  if (data.grupo) insertPayload.grupo = data.grupo.trim();
-  if (data.concurso) insertPayload.concurso = data.concurso.trim();
-  if (data.disciplina) insertPayload.disciplina = data.disciplina.trim();
+  if (data.grupo) insertPayload['grupo'] = data.grupo.trim();
+  if (data.concurso) insertPayload['concurso'] = data.concurso.trim();
+  if (data.disciplina) insertPayload['disciplina'] = data.disciplina.trim();
 
   let { data: material, error } = await supabase
     .from("study_materials")
@@ -107,9 +107,9 @@ export async function saveCustomMaterialStructureFlow(
     .single();
 
   if (error && (error.message?.includes("column") || (error as any).code === "PGRST204")) {
-    delete insertPayload.grupo;
-    delete insertPayload.concurso;
-    delete insertPayload.disciplina;
+    delete insertPayload['grupo'];
+    delete insertPayload['concurso'];
+    delete insertPayload['disciplina'];
     const retry = await supabase
       .from("study_materials")
       .insert(insertPayload)
