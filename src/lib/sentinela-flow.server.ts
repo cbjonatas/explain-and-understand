@@ -35,10 +35,10 @@ export async function analyzeMaterialStructureFlow(
   }
 
   const parsed = await callAiJson<{
-    grupo?: string;
-    concurso?: string;
-    disciplina?: string;
-    assunto?: string;
+    grupo?: string | undefined;
+    concurso?: string | undefined;
+    disciplina?: string | undefined;
+    assunto?: string | undefined;
     topics?: Array<{ nome?: string; descricao?: string; conceitos_principais?: string[] }>;
   }>(TOPICS_SYSTEM, `Texto do material "${data.nome}":\n\n${texto.slice(0, 90000)}`);
 
@@ -75,10 +75,10 @@ export async function saveCustomMaterialStructureFlow(
     arquivo: string | null;
     paginas: number;
     texto: string;
-    grupo?: string;
-    concurso?: string;
-    disciplina?: string;
-    assunto?: string;
+    grupo?: string | undefined;
+    concurso?: string | undefined;
+    disciplina?: string | undefined;
+    assunto?: string | undefined;
     topics: Array<{ nome: string; descricao: string | null; conceitos_principais: string[] }>;
   },
 ) {
@@ -96,9 +96,9 @@ export async function saveCustomMaterialStructureFlow(
     quantidade_paginas: data.paginas,
     texto_extraido: texto.slice(0, 400000),
   };
-  if (data.grupo) insertPayload.grupo = data.grupo.trim();
-  if (data.concurso) insertPayload.concurso = data.concurso.trim();
-  if (data.disciplina) insertPayload.disciplina = data.disciplina.trim();
+  if (data.grupo) insertPayload['grupo'] = data.grupo.trim();
+  if (data.concurso) insertPayload['concurso'] = data.concurso.trim();
+  if (data.disciplina) insertPayload['disciplina'] = data.disciplina.trim();
 
   let { data: material, error } = await supabase
     .from("study_materials")
@@ -107,9 +107,9 @@ export async function saveCustomMaterialStructureFlow(
     .single();
 
   if (error && (error.message?.includes("column") || (error as any).code === "PGRST204")) {
-    delete insertPayload.grupo;
-    delete insertPayload.concurso;
-    delete insertPayload.disciplina;
+    delete insertPayload['grupo'];
+    delete insertPayload['concurso'];
+    delete insertPayload['disciplina'];
     const retry = await supabase
       .from("study_materials")
       .insert(insertPayload)
