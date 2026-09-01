@@ -36,41 +36,60 @@ async function fileToArrayBuffer(file: File | Blob): Promise<ArrayBuffer> {
   });
 }
 
-/**
- * Extracts plain text from a single PDF page using standard synchronous text item arrays,
- * avoiding any ReadableStream methods or async iterators that break on WebKit/iOS.
- */
-async function extractPageText(page: {
-  getTextContent?: (params?: Record<string, unknown>) => Promise<{ items?: Array<{ str?: string }> }>;
-}): Promise<string> {
-  try {
-    if (!page || typeof page.getTextContent !== "function") {
-      return "";
-    }
+type TextItem = { str?: string };
 
-    const textContent = await page.getTextContent({
+function joinItems(items: unknown): string[] {
+  const parts: string[] = [];
+  if (!items) return parts;
+  const list = Array.isArray(items) ? (items as TextItem[]) : [];
+  for (const item of list) {
+    if (item && typeof item === "object" && typeof item.str === "string" && item.str.trim()) {
+      parts.push(item.str);
+    }
+  }
+  return parts;
+}
+
+/**
+ * iOS/WebKit does not implement async iteration over ReadableStream
+ * (`for await (const x of stream)`), which is exactly what pdf.js
+ * `getTextContent()` uses internally — it throws
+ * "undefined is not a function (near '...value of readableStream...')" and the
+ * page ends up with no text. Reading the same stream with an explicit reader
+ * works on every engine, so we do that first and only fall back to
+ * `getTextContent()` when the streaming API is unavailable.
+ */
+async function extractPageText(page: any): Promise<string> {
+  if (typeof page?.streamTextContent === "function") {
+    const stream = page.streamTextContent({
       includeMarkedContent: false,
       disableNormalization: false,
     });
-
-    if (!textContent || !Array.isArray(textContent.items)) {
-      return "";
-    }
-
-    const parts: string[] = [];
-    for (const item of textContent.items) {
-      if (item && typeof item === "object" && typeof item.str === "string") {
-        if (item.str.trim()) {
-          parts.push(item.str);
+    const reader = stream?.getReader?.();
+    if (reader) {
+      const parts: string[] = [];
+      try {
+        for (;;) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          parts.push(...joinItems(value?.items));
+        }
+      } finally {
+        try {
+          reader.releaseLock?.();
+        } catch {
+          // ignore
         }
       }
+      return parts.join(" ").replace(/\s+/g, " ").trim();
     }
-
-    return parts.join(" ").replace(/\s+/g, " ").trim();
-  } catch (err) {
-    console.warn("Aviso ao extrair texto da página:", err);
-    return "";
   }
+
+  const textContent = await page.getTextContent({
+    includeMarkedContent: false,
+    disableNormalization: false,
+  });
+  return joinItems(textContent?.items).join(" ").replace(/\s+/g, " ").trim();
 }
 
 /**
