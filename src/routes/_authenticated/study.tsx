@@ -692,7 +692,7 @@ function StudyPage() {
                 onClick={() => {
                   setGroupChoice("existing_group");
                   if (!selectedExistingGroup && existingGroupNames.length > 0) {
-                    setSelectedExistingGroup(existingGroupNames[0]);
+                    setSelectedExistingGroup(existingGroupNames[0] ?? "");
                   }
                 }}
                 className={`cursor-pointer rounded-lg border p-4 transition-all ${
@@ -709,7 +709,7 @@ function StudyPage() {
                     onChange={() => {
                       setGroupChoice("existing_group");
                       if (!selectedExistingGroup && existingGroupNames.length > 0) {
-                        setSelectedExistingGroup(existingGroupNames[0]);
+                        setSelectedExistingGroup(existingGroupNames[0] ?? "");
                       }
                     }}
                     className="text-primary"

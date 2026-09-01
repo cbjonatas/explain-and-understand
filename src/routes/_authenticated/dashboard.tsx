@@ -238,7 +238,7 @@ function Dashboard() {
       setExpandedSubjects((prev) => {
         const next = { ...prev };
         groupKeys.forEach((g) => {
-          Object.keys(groupBuckets[g].subjects).forEach((s) => {
+          Object.keys(groupBuckets[g]?.subjects ?? {}).forEach((s) => {
             const composite = `${g}:::${s}`;
             if (next[composite] === undefined) next[composite] = true;
           });
@@ -539,6 +539,7 @@ function Dashboard() {
 
         {groupKeys.map((groupName) => {
           const groupBucket = groupBuckets[groupName];
+          if (!groupBucket) return null;
           const subjectList = Object.values(groupBucket.subjects);
           const isGroupExpanded = expandedGroups[groupName] !== false;
 

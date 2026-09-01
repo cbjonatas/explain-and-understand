@@ -63,7 +63,7 @@ export function useSentinelaVoice() {
     );
 
     if (naturalPtBr) return naturalPtBr;
-    if (ptBrVoices.length > 0) return ptBrVoices[0];
+    if (ptBrVoices[0]) return ptBrVoices[0];
 
     // 2. Generic Portuguese fallback
     const ptVoices = voices.filter((v) => v.lang.startsWith("pt"));
