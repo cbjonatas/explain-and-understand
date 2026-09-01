@@ -1,0 +1,4 @@
+ALTER TABLE public.study_materials
+  ADD COLUMN IF NOT EXISTS grupo TEXT,
+  ADD COLUMN IF NOT EXISTS concurso TEXT,
+  ADD COLUMN IF NOT EXISTS disciplina TEXT;

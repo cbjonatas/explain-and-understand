@@ -198,7 +198,10 @@ export type Database = {
       study_materials: {
         Row: {
           arquivo: string | null
+          concurso: string | null
           created_at: string
+          disciplina: string | null
+          grupo: string | null
           id: string
           nome: string
           quantidade_paginas: number | null
@@ -207,7 +210,10 @@ export type Database = {
         }
         Insert: {
           arquivo?: string | null
+          concurso?: string | null
           created_at?: string
+          disciplina?: string | null
+          grupo?: string | null
           id?: string
           nome: string
           quantidade_paginas?: number | null
@@ -216,7 +222,10 @@ export type Database = {
         }
         Update: {
           arquivo?: string | null
+          concurso?: string | null
           created_at?: string
+          disciplina?: string | null
+          grupo?: string | null
           id?: string
           nome?: string
           quantidade_paginas?: number | null
