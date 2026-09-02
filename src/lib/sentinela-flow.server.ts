@@ -298,6 +298,8 @@ export async function evaluateFlow(
     previous = prev ?? null;
   }
 
+  const styleGuide = await buildStyleGuide(supabase, userId);
+
   const parsed = await callAiJson<any>(
     EVAL_SYSTEM,
     [
@@ -309,6 +311,7 @@ export async function evaluateFlow(
         : "TENTATIVA ANTERIOR: nenhuma",
       `\nCONTEÚDO DO MATERIAL (fonte da verdade):\n${trecho.slice(0, 60000)}`,
       `\nEXPLICAÇÃO FALADA DO ESTUDANTE (transcrição):\n${data.transcription}`,
+      styleGuide,
     ].join("\n"),
   );
 
