@@ -12,6 +12,7 @@ import {
   transcribeAudioFile,
   weightedScore,
 } from "./sentinela.server";
+import { buildStyleGuide } from "./training.server";
 import type {
   EvaluationItem,
   EvaluationResult,
