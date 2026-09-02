@@ -97,7 +97,7 @@ export const generateQuestion = createServerFn({ method: "POST" })
     }): Promise<
       | { ok: true; data: { pergunta: string; topicName: string; materialId: string } }
       | { ok: false; message: string }
-    > => toFlowResult(() => generateQuestionFlow(context.supabase, data.topicId)),
+    > => toFlowResult(() => generateQuestionFlow(context.supabase, data.topicId, context.userId)),
   );
 
 export const transcribeExplanation = createServerFn({ method: "POST" })
