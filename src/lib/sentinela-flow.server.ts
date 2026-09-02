@@ -226,7 +226,7 @@ async function getAggregatedSubjectText(
   return initialText;
 }
 
-export async function generateQuestionFlow(supabase: Db, topicId: string) {
+export async function generateQuestionFlow(supabase: Db, topicId: string, userId?: string | null) {
   const { data: topic, error } = await supabase
     .from("topics")
     .select("nome, descricao, conceitos_principais, material_id, study_materials(texto_extraido)")
@@ -237,10 +237,11 @@ export async function generateQuestionFlow(supabase: Db, topicId: string) {
   const rawText = (topic as any).study_materials?.texto_extraido ?? "";
   const materialText = await getAggregatedSubjectText(supabase, topic.material_id, rawText);
   const trecho = relevantMaterial(materialText, topic.nome, topic.conceitos_principais ?? []);
+  const styleGuide = await buildStyleGuide(supabase, userId ?? null);
 
   const parsed = await callAiJson<{ pergunta?: string }>(
     QUESTION_SYSTEM,
-    `Assunto: ${topic.nome}\nDescrição: ${topic.descricao ?? "-"}\nConceitos que importam: ${(topic.conceitos_principais ?? []).join(", ")}\n\nTrecho do material:\n${trecho.slice(0, 20000)}`,
+    `Assunto: ${topic.nome}\nDescrição: ${topic.descricao ?? "-"}\nConceitos que importam: ${(topic.conceitos_principais ?? []).join(", ")}\n\nTrecho do material:\n${trecho.slice(0, 20000)}${styleGuide}`,
   );
 
   const pergunta = parsed.pergunta?.trim();
