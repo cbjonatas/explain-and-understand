@@ -40,6 +40,11 @@ export function AppShell({ children }: { children: ReactNode }) {
                 Histórico
               </Button>
             </Link>
+            <Link to="/training">
+              <Button variant="ghost" size="sm">
+                Treinamento
+              </Button>
+            </Link>
             <Button
               variant="ghost"
               size="icon"
