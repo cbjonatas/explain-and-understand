@@ -19,6 +19,7 @@ import {
   Shield,
   Sparkles,
   Trash2,
+  User,
   Users,
   X,
 } from "lucide-react";
@@ -465,7 +466,7 @@ function Dashboard() {
             Sua biblioteca personalizada organizada por Grupos, Concursos e Assuntos com a Sentinela.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {isAdmin && (
             <Link to="/users">
               <Button variant="outline" className="gap-1.5 text-primary border-primary/30 hover:bg-primary/10">
@@ -473,6 +474,11 @@ function Dashboard() {
               </Button>
             </Link>
           )}
+          <Link to="/profile">
+            <Button variant="outline" className="gap-1.5">
+              <User className="size-4 text-primary" /> Meu Perfil
+            </Button>
+          </Link>
           <Button variant="outline" onClick={() => setIsCreateGroupOpen(true)} className="gap-1.5">
             <FolderPlus className="size-4" /> Criar grupo
           </Button>
