@@ -227,7 +227,45 @@ async function getAggregatedSubjectText(
   return initialText;
 }
 
+export async function assertUserAccess(supabase: Db, userId?: string | null) {
+  if (!userId) return;
+  try {
+    const { data: isAdmin } = await (supabase as any).rpc("has_role", {
+      _user_id: userId,
+      _role: "admin",
+    });
+    if (isAdmin === true) return;
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("acesso_liberado, acesso_expira_em")
+      .eq("id", userId)
+      .maybeSingle();
+
+    if (!profile) return;
+
+    if (!profile.acesso_liberado) {
+      throw new AiError(
+        403,
+        "Seu acesso à Sentinela está bloqueado ou aguardando liberação do professor/administrador.",
+      );
+    }
+
+    if (profile.acesso_expira_em && new Date(profile.acesso_expira_em) < new Date()) {
+      throw new AiError(
+        403,
+        "Seu período de acesso à Sentinela expirou. Solicite a renovação ao administrador.",
+      );
+    }
+  } catch (err) {
+    if (err instanceof AiError) throw err;
+    // Non-critical if table column doesn't exist yet
+  }
+}
+
 export async function generateQuestionFlow(supabase: Db, topicId: string, userId?: string | null) {
+  await assertUserAccess(supabase, userId);
+
   const { data: topic, error } = await supabase
     .from("topics")
     .select("nome, descricao, conceitos_principais, material_id, study_materials(texto_extraido)")
@@ -270,6 +308,8 @@ export async function evaluateFlow(
     previousExplanationId: string | null;
   },
 ) {
+  await assertUserAccess(supabase, userId);
+
   if (data.transcription.trim().length < 40) {
     throw new AiError(
       422,

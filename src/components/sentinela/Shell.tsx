@@ -44,11 +44,18 @@ export function AppShell({ children }: { children: ReactNode }) {
               </Button>
             </Link>
             {isAdmin && (
-              <Link to="/training">
-                <Button variant="ghost" size="sm">
-                  Treinamento
-                </Button>
-              </Link>
+              <>
+                <Link to="/training">
+                  <Button variant="ghost" size="sm">
+                    Treinamento
+                  </Button>
+                </Link>
+                <Link to="/users">
+                  <Button variant="ghost" size="sm">
+                    Usuários
+                  </Button>
+                </Link>
+              </>
             )}
             <Button
               variant="ghost"

@@ -16,8 +16,10 @@ import {
   Layers,
   MoreVertical,
   Plus,
+  Shield,
   Sparkles,
   Trash2,
+  Users,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -45,6 +47,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/useAuth";
+import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
@@ -84,6 +87,7 @@ type MaterialItem = {
 
 function Dashboard() {
   const { user } = useAuth();
+  const { isAdmin } = useIsAdmin();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -462,6 +466,13 @@ function Dashboard() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {isAdmin && (
+            <Link to="/users">
+              <Button variant="outline" className="gap-1.5 text-primary border-primary/30 hover:bg-primary/10">
+                <Users className="size-4" /> Gestão de Usuários
+              </Button>
+            </Link>
+          )}
           <Button variant="outline" onClick={() => setIsCreateGroupOpen(true)} className="gap-1.5">
             <FolderPlus className="size-4" /> Criar grupo
           </Button>
