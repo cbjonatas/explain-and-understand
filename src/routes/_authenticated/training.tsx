@@ -240,12 +240,16 @@ function TrainingPage() {
     }
   }
 
-  if (loading) {
+  if (loading || adminLoading) {
     return (
       <AppShell>
         <Skeleton className="h-64 w-full" />
       </AppShell>
     );
+  }
+
+  if (!isAdmin) {
+    return null;
   }
 
   const examples = examplesQuery.data ?? [];
