@@ -80,8 +80,17 @@ const db = () => supabase as any;
 
 function TrainingPage() {
   const { user, loading } = useAuth();
+  const { isAdmin, loading: adminLoading } = useIsAdmin();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const runAnalysis = useServerFn(analyzeLanguageProfile);
+
+  useEffect(() => {
+    if (!loading && !adminLoading && !isAdmin) {
+      navigate({ to: "/dashboard", replace: true });
+    }
+  }, [loading, adminLoading, isAdmin, navigate]);
+
 
   const [titulo, setTitulo] = useState("");
   const [categoria, setCategoria] = useState<TrainingCategory>("linguagem");
