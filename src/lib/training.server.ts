@@ -47,12 +47,21 @@ export async function analyzeLanguageProfileFlow(
   supabase: Db,
   userId: string,
 ): Promise<LanguageProfile> {
+  const { data: isAdmin } = await supabase.rpc("has_role", {
+    _user_id: userId,
+    _role: "admin",
+  });
+  if (!isAdmin) {
+    throw new AiError(403, "Área restrita ao administrador.");
+  }
+
   const { data: examples, error } = await supabase
     .from("training_examples")
     .select("titulo, categoria, texto")
     .eq("user_id", userId)
     .eq("ativo", true)
     .order("created_at", { ascending: false });
+
 
   if (error) throw new AiError(500, "Não foi possível carregar seus exemplos de treinamento.");
 
