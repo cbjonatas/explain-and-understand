@@ -13,10 +13,11 @@ export type ManagedUser = {
   ultimo_acesso: string | null;
 };
 
-type Db = { rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown }> };
-
-export async function assertAdmin(supabase: Db, userId: string) {
-  const { data } = await supabase.rpc("has_role", { _user_id: userId, _role: "admin" });
+export async function assertAdmin(supabase: unknown, userId: string) {
+  const { data } = await (supabase as any).rpc("has_role", {
+    _user_id: userId,
+    _role: "admin",
+  });
   if (data !== true) throw new Error("Área restrita ao administrador.");
 }
 
