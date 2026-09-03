@@ -68,3 +68,22 @@ export const sendUserPasswordReset = createServerFn({ method: "POST" })
       return sendPasswordResetFlow(data);
     }),
   );
+
+export const batchUpdateAccess = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data) =>
+    z
+      .object({
+        userIds: z.array(z.string().uuid()).min(1),
+        dias: z.number().int().min(1).max(3650),
+        acessoLiberado: z.boolean(),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data, context }) =>
+    toFlowResult(async () => {
+      const { assertAdmin, batchUpdateAccessFlow } = await import("./admin.server");
+      await assertAdmin(context.supabase, context.userId);
+      return batchUpdateAccessFlow(data);
+    }),
+  );

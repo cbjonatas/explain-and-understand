@@ -5,12 +5,14 @@ import { useServerFn } from "@tanstack/react-start";
 import {
   Calendar,
   CheckCircle2,
+  CheckSquare,
   Clock,
   Copy,
   Edit2,
   Eye,
   EyeOff,
   KeyRound,
+  Layers,
   Mail,
   MoreVertical,
   Plus,
@@ -21,11 +23,13 @@ import {
   ShieldAlert,
   ShieldCheck,
   Sparkles,
+  Square,
   UserCheck,
   UserCog,
   Users,
   UserX,
   XCircle,
+  Zap,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -59,12 +63,14 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
 import {
+  batchUpdateAccess,
   listUsers,
   sendUserPasswordReset,
   setUserPassword,
@@ -97,10 +103,17 @@ function UsersManagementPage() {
   const runUpdateUser = useServerFn(updateUser);
   const runSetPassword = useServerFn(setUserPassword);
   const runSendPasswordReset = useServerFn(sendUserPasswordReset);
+  const runBatchUpdateAccess = useServerFn(batchUpdateAccess);
 
   // Search & Filter state
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "blocked" | "expired">("all");
+
+  // Multi-selection state for Batch operations
+  const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(new Set());
+  const [isBatchModalOpen, setIsBatchModalOpen] = useState(false);
+  const [batchDaysOption, setBatchDaysOption] = useState<"30" | "60" | "90" | "custom">("30");
+  const [batchCustomDays, setBatchCustomDays] = useState("30");
 
   // Modal states
   const [editingUser, setEditingUser] = useState<ManagedUser | null>(null);
@@ -154,9 +167,35 @@ function UsersManagementPage() {
       toast.success("Dados e acesso do usuário atualizados com sucesso!");
       setEditingUser(null);
       queryClient.invalidateQueries({ queryKey: ["admin-users-list"] });
+      queryClient.invalidateQueries({ queryKey: ["user-access-status"] });
     },
     onError: (err) => {
       toast.error(err instanceof Error ? err.message : "Erro ao atualizar usuário.");
+    },
+  });
+
+  // Mutation: Batch Update Access
+  const batchUpdateMutation = useMutation({
+    mutationFn: async ({ userIds, dias }: { userIds: string[]; dias: number }) => {
+      const response = await runBatchUpdateAccess({
+        data: {
+          userIds,
+          dias,
+          acessoLiberado: true,
+        },
+      });
+      if (!response.ok) throw new Error(response.message);
+      return response.data;
+    },
+    onSuccess: (data) => {
+      toast.success(`Acesso liberado com sucesso para ${data.count} aluno(s)!`);
+      setSelectedUserIds(new Set());
+      setIsBatchModalOpen(false);
+      queryClient.invalidateQueries({ queryKey: ["admin-users-list"] });
+      queryClient.invalidateQueries({ queryKey: ["user-access-status"] });
+    },
+    onError: (err) => {
+      toast.error(err instanceof Error ? err.message : "Erro na liberação em lote.");
     },
   });
 
@@ -193,7 +232,7 @@ function UsersManagementPage() {
       return response.data;
     },
     onSuccess: () => {
-      toast.success(`E-mail com instruções para redefinição de senha enviado para ${emailResetTarget?.email}!`);
+      toast.success(`E-mail de redefinição de senha enviado para ${emailResetTarget?.email}!`);
       setEmailResetTarget(null);
     },
     onError: (err) => {
@@ -220,6 +259,7 @@ function UsersManagementPage() {
           : "Acesso do usuário bloqueado!",
       );
       queryClient.invalidateQueries({ queryKey: ["admin-users-list"] });
+      queryClient.invalidateQueries({ queryKey: ["user-access-status"] });
     },
     onError: (err) => {
       toast.error(err instanceof Error ? err.message : "Erro ao alterar liberação de acesso.");
@@ -324,6 +364,43 @@ function UsersManagementPage() {
     };
   }, [usersQuery.data]);
 
+  // Toggle selection for a single user
+  function toggleUserSelection(userId: string) {
+    setSelectedUserIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(userId)) {
+        next.delete(userId);
+      } else {
+        next.add(userId);
+      }
+      return next;
+    });
+  }
+
+  // Toggle select all filtered users
+  function toggleSelectAll() {
+    if (selectedUserIds.size === filteredUsers.length && filteredUsers.length > 0) {
+      setSelectedUserIds(new Set());
+    } else {
+      setSelectedUserIds(new Set(filteredUsers.map((u) => u.id)));
+    }
+  }
+
+  // Calculate batch days
+  const effectiveBatchDays = useMemo(() => {
+    if (batchDaysOption === "custom") {
+      const parsed = parseInt(batchCustomDays, 10);
+      return isNaN(parsed) || parsed < 1 ? 30 : parsed;
+    }
+    return parseInt(batchDaysOption, 10);
+  }, [batchDaysOption, batchCustomDays]);
+
+  const batchExpirationPreview = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + effectiveBatchDays);
+    return d;
+  }, [effectiveBatchDays]);
+
   return (
     <AppShell>
       {/* Top Header */}
@@ -336,21 +413,61 @@ function UsersManagementPage() {
           </div>
           <h1 className="mt-2 text-2xl font-bold tracking-tight">Gestão de Usuários & Acessos</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Visualize todos os alunos cadastrados, controle a liberação de acesso, altere senhas e envie links de recuperação.
+            Controle de liberação de acesso, bloqueio em tempo real, liberação em lote e senhas.
           </p>
         </div>
 
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => queryClient.invalidateQueries({ queryKey: ["admin-users-list"] })}
-          disabled={usersQuery.isFetching}
-          className="gap-1.5 text-xs"
-        >
-          <RefreshCw className={`size-3.5 ${usersQuery.isFetching ? "animate-spin" : ""}`} />
-          Atualizar lista
-        </Button>
+        <div className="flex items-center gap-2">
+          {selectedUserIds.size > 0 && (
+            <Button
+              onClick={() => setIsBatchModalOpen(true)}
+              className="gap-1.5 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm animate-fade-in"
+            >
+              <Zap className="size-3.5" />
+              Liberar em Lote ({selectedUserIds.size})
+            </Button>
+          )}
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => queryClient.invalidateQueries({ queryKey: ["admin-users-list"] })}
+            disabled={usersQuery.isFetching}
+            className="gap-1.5 text-xs"
+          >
+            <RefreshCw className={`size-3.5 ${usersQuery.isFetching ? "animate-spin" : ""}`} />
+            Atualizar lista
+          </Button>
+        </div>
       </div>
+
+      {/* Batch Selection Banner */}
+      {selectedUserIds.size > 0 && (
+        <div className="card-surface mt-4 flex flex-wrap items-center justify-between gap-3 border-emerald-500/40 bg-emerald-500/10 p-3.5">
+          <div className="flex items-center gap-2 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+            <CheckSquare className="size-4" />
+            <span>{selectedUserIds.size} aluno(s) selecionado(s) para ações em lote.</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              onClick={() => setIsBatchModalOpen(true)}
+              className="h-8 gap-1 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
+            >
+              <Zap className="size-3.5" />
+              Definir validade em lote
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setSelectedUserIds(new Set())}
+              className="h-8 text-xs text-muted-foreground hover:text-foreground"
+            >
+              Desmarcar todos
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Metrics Grid */}
       <div className="mt-6 grid gap-4 grid-cols-2 lg:grid-cols-4">
@@ -378,7 +495,7 @@ function UsersManagementPage() {
             <UserX className="size-4 text-amber-500" />
           </div>
           <p className="mt-2 font-display text-3xl font-bold text-amber-500">{stats.bloqueados}</p>
-          <p className="mt-1 text-[11px] text-muted-foreground">Aguardando liberação</p>
+          <p className="mt-1 text-[11px] text-muted-foreground">Acesso barrado na entrada</p>
         </div>
 
         <div className="card-surface p-5 border-l-4 border-l-rose-500">
@@ -443,7 +560,7 @@ function UsersManagementPage() {
         </div>
       </div>
 
-      {/* Users Table / List */}
+      {/* Users Table / List with Multi-selection */}
       <div className="mt-4 card-surface overflow-hidden p-0 border border-border/80 shadow-sm">
         {usersQuery.isLoading ? (
           <div className="p-6 space-y-4">
@@ -464,6 +581,15 @@ function UsersManagementPage() {
             <table className="w-full text-left border-collapse text-xs">
               <thead>
                 <tr className="border-b border-border/70 bg-muted/30 text-muted-foreground uppercase text-[10px] tracking-wider font-semibold">
+                  <th className="w-10 px-4 py-3 text-center">
+                    <input
+                      type="checkbox"
+                      checked={selectedUserIds.size === filteredUsers.length && filteredUsers.length > 0}
+                      onChange={toggleSelectAll}
+                      className="size-4 rounded border-border text-primary focus:ring-primary cursor-pointer"
+                      title="Selecionar todos os alunos visíveis"
+                    />
+                  </th>
                   <th className="px-4 py-3">Aluno / Usuário</th>
                   <th className="px-4 py-3">Perfil</th>
                   <th className="px-4 py-3">Liberação de Acesso</th>
@@ -478,9 +604,26 @@ function UsersManagementPage() {
                   const now = new Date();
                   const isExpired = u.acesso_expira_em ? new Date(u.acesso_expira_em) < now : false;
                   const expDate = u.acesso_expira_em ? new Date(u.acesso_expira_em) : null;
+                  const isSelected = selectedUserIds.has(u.id);
 
                   return (
-                    <tr key={u.id} className="hover:bg-muted/10 transition-colors">
+                    <tr
+                      key={u.id}
+                      className={`transition-colors ${
+                        isSelected ? "bg-primary/5" : "hover:bg-muted/10"
+                      }`}
+                    >
+                      {/* Checkbox */}
+                      <td className="px-4 py-3.5 text-center">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleUserSelection(u.id)}
+                          className="size-4 rounded border-border text-primary focus:ring-primary cursor-pointer"
+                          aria-label={`Selecionar ${u.nome || u.email}`}
+                        />
+                      </td>
+
                       {/* Name & Email */}
                       <td className="px-4 py-3.5">
                         <div className="flex items-center gap-2.5">
@@ -652,7 +795,104 @@ function UsersManagementPage() {
         )}
       </div>
 
-      {/* Modal 1: Edit User & Access Details */}
+      {/* Modal: Batch Access Release */}
+      <Dialog open={isBatchModalOpen} onOpenChange={setIsBatchModalOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Zap className="size-5 text-emerald-500" />
+              Liberar Acesso em Lote
+            </DialogTitle>
+            <DialogDescription>
+              Você está definindo a liberação de acesso para <strong>{selectedUserIds.size} aluno(s) selecionado(s)</strong>.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <Label className="text-xs font-semibold">Escolha a quantidade de dias de acesso:</Label>
+
+            <div className="grid grid-cols-2 gap-2.5">
+              {[
+                { id: "30", label: "30 dias", desc: "Padrão 1 mês" },
+                { id: "60", label: "60 dias", desc: "2 meses" },
+                { id: "90", label: "90 dias", desc: "3 meses" },
+                { id: "custom", label: "Personalizado", desc: "Definir dias" },
+              ].map((opt) => (
+                <div
+                  key={opt.id}
+                  onClick={() => setBatchDaysOption(opt.id as any)}
+                  className={`cursor-pointer rounded-lg border p-3 text-left transition-all ${
+                    batchDaysOption === opt.id
+                      ? "border-emerald-500 bg-emerald-500/10 ring-1 ring-emerald-500/40"
+                      : "border-border hover:border-border/80"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-foreground">{opt.label}</span>
+                    <span className="size-2 rounded-full bg-emerald-500" style={{ opacity: batchDaysOption === opt.id ? 1 : 0 }} />
+                  </div>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">{opt.desc}</p>
+                </div>
+              ))}
+            </div>
+
+            {batchDaysOption === "custom" && (
+              <div className="space-y-1.5 pt-2">
+                <Label htmlFor="custom-days-input" className="text-xs font-semibold">
+                  Quantidade de dias personalizada:
+                </Label>
+                <Input
+                  id="custom-days-input"
+                  type="number"
+                  min="1"
+                  max="3650"
+                  value={batchCustomDays}
+                  onChange={(e) => setBatchCustomDays(e.target.value)}
+                  placeholder="Ex: 45, 120, 365..."
+                  autoFocus
+                />
+              </div>
+            )}
+
+            {/* Expiration Date Preview */}
+            <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3 text-xs">
+              <p className="text-muted-foreground">
+                Os alunos selecionados terão acesso liberado até:
+              </p>
+              <p className="mt-1 font-bold text-emerald-600 dark:text-emerald-400 text-sm">
+                📅 {batchExpirationPreview.toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" })} (+{effectiveBatchDays} dias)
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsBatchModalOpen(false)}>
+              Cancelar
+            </Button>
+            <Button
+              disabled={batchUpdateMutation.isPending || selectedUserIds.size === 0 || effectiveBatchDays < 1}
+              onClick={() => {
+                batchUpdateMutation.mutate({
+                  userIds: Array.from(selectedUserIds),
+                  dias: effectiveBatchDays,
+                });
+              }}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold gap-2"
+            >
+              {batchUpdateMutation.isPending ? (
+                "Atualizando..."
+              ) : (
+                <>
+                  <CheckCircle2 className="size-4" />
+                  Confirmar Liberação ({selectedUserIds.size})
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal: Edit User & Access Details */}
       <Dialog open={Boolean(editingUser)} onOpenChange={(open) => !open && setEditingUser(null)}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
@@ -698,7 +938,7 @@ function UsersManagementPage() {
                       Acesso Liberado à Plataforma
                     </Label>
                     <p className="text-xs text-muted-foreground">
-                      Quando ativado, o aluno consegue acessar a Sentinela e suas sessões de estudo.
+                      Quando desativado, o aluno é barrado imediatamente na entrada.
                     </p>
                   </div>
                   <Switch
@@ -747,9 +987,9 @@ function UsersManagementPage() {
                     variant="outline"
                     size="sm"
                     className="h-7 text-[11px]"
-                    onClick={() => addDaysToExpiration(180)}
+                    onClick={() => addDaysToExpiration(90)}
                   >
-                    +6 meses
+                    +90 dias
                   </Button>
                   <Button
                     type="button"
@@ -801,7 +1041,7 @@ function UsersManagementPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Modal 2: Change Password Directly */}
+      {/* Modal: Change Password Directly */}
       <Dialog open={Boolean(passwordModalUser)} onOpenChange={(open) => !open && setPasswordModalUser(null)}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -886,7 +1126,7 @@ function UsersManagementPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Modal 3: Confirmation Dialog for Sending Password Reset Email */}
+      {/* Modal: Confirmation Dialog for Sending Password Reset Email */}
       <AlertDialog open={Boolean(emailResetTarget)} onOpenChange={(open) => !open && setEmailResetTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>

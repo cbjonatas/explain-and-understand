@@ -122,3 +122,29 @@ export async function sendPasswordResetFlow(input: {
   if (error) throw new Error(error.message);
   return { ok: true };
 }
+
+export async function batchUpdateAccessFlow(input: {
+  userIds: string[];
+  dias: number;
+  acessoLiberado: boolean;
+}): Promise<{ count: number; expiraEm: string }> {
+  const db = await admin();
+  if (!input.userIds || input.userIds.length === 0) {
+    return { count: 0, expiraEm: new Date().toISOString() };
+  }
+
+  const expiraEm = new Date();
+  expiraEm.setDate(expiraEm.getDate() + input.dias);
+  const expiraEmIso = expiraEm.toISOString();
+
+  const { error } = await db
+    .from("profiles")
+    .update({
+      acesso_liberado: input.acessoLiberado,
+      acesso_expira_em: expiraEmIso,
+    })
+    .in("id", input.userIds);
+
+  if (error) throw new Error(error.message);
+  return { count: input.userIds.length, expiraEm: expiraEmIso };
+}
