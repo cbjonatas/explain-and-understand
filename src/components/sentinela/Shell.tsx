@@ -3,6 +3,7 @@ import { LogOut, Radar } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
+import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { supabase } from "@/integrations/supabase/client";
 
 export function Brand({ compact = false }: { compact?: boolean }) {
