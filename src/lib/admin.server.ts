@@ -72,13 +72,18 @@ export async function updateUserFlow(input: {
 }): Promise<{ ok: true }> {
   const db = await admin();
 
-  const patch: Record<string, unknown> = {};
-  if (input.nome !== undefined) patch["nome"] = input.nome;
-  if (input.email !== undefined) patch["email"] = input.email;
-  if (input.acessoLiberado !== undefined) patch["acesso_liberado"] = input.acessoLiberado;
-  if (input.acessoExpiraEm !== undefined && input.acessoExpiraEm)
-    patch["acesso_expira_em"] = input.acessoExpiraEm;
-  if (input.observacao !== undefined) patch["observacao_admin"] = input.observacao;
+  const patch: {
+    nome?: string | null;
+    email?: string | null;
+    acesso_liberado?: boolean;
+    acesso_expira_em?: string;
+    observacao_admin?: string | null;
+  } = {};
+  if (input.nome !== undefined) patch.nome = input.nome;
+  if (input.email !== undefined) patch.email = input.email;
+  if (input.acessoLiberado !== undefined) patch.acesso_liberado = input.acessoLiberado;
+  if (input.acessoExpiraEm) patch.acesso_expira_em = input.acessoExpiraEm;
+  if (input.observacao !== undefined) patch.observacao_admin = input.observacao;
 
   if (Object.keys(patch).length > 0) {
     const { error } = await db.from("profiles").update(patch).eq("id", input.userId);
