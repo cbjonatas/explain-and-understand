@@ -3,6 +3,7 @@ import { LogOut, Radar } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
+import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { supabase } from "@/integrations/supabase/client";
 
 export function Brand({ compact = false }: { compact?: boolean }) {
@@ -21,6 +22,8 @@ export function Brand({ compact = false }: { compact?: boolean }) {
 
 export function AppShell({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
+  const { isAdmin } = useIsAdmin();
+
 
   return (
     <div className="min-h-screen">
@@ -40,11 +43,13 @@ export function AppShell({ children }: { children: ReactNode }) {
                 Histórico
               </Button>
             </Link>
-            <Link to="/training">
-              <Button variant="ghost" size="sm">
-                Treinamento
-              </Button>
-            </Link>
+            {isAdmin && (
+              <Link to="/training">
+                <Button variant="ghost" size="sm">
+                  Treinamento
+                </Button>
+              </Link>
+            )}
             <Button
               variant="ghost"
               size="icon"

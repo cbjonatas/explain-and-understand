@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import {
   BrainCircuit,
@@ -43,6 +43,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/useAuth";
+import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { supabase } from "@/integrations/supabase/client";
 import { extractPdfText } from "@/lib/pdf";
 import { analyzeLanguageProfile } from "@/lib/training.functions";
@@ -80,8 +81,17 @@ const db = () => supabase as any;
 
 function TrainingPage() {
   const { user, loading } = useAuth();
+  const { isAdmin, loading: adminLoading } = useIsAdmin();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const runAnalysis = useServerFn(analyzeLanguageProfile);
+
+  useEffect(() => {
+    if (!loading && !adminLoading && !isAdmin) {
+      navigate({ to: "/dashboard", replace: true });
+    }
+  }, [loading, adminLoading, isAdmin, navigate]);
+
 
   const [titulo, setTitulo] = useState("");
   const [categoria, setCategoria] = useState<TrainingCategory>("linguagem");
@@ -240,12 +250,16 @@ function TrainingPage() {
     }
   }
 
-  if (loading) {
+  if (loading || adminLoading) {
     return (
       <AppShell>
         <Skeleton className="h-64 w-full" />
       </AppShell>
     );
+  }
+
+  if (!isAdmin) {
+    return null;
   }
 
   const examples = examplesQuery.data ?? [];
