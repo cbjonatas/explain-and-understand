@@ -230,22 +230,31 @@ export type Database = {
       }
       profiles: {
         Row: {
+          acesso_expira_em: string
+          acesso_liberado: boolean
           created_at: string
           email: string | null
           id: string
           nome: string | null
+          observacao_admin: string | null
         }
         Insert: {
+          acesso_expira_em?: string
+          acesso_liberado?: boolean
           created_at?: string
           email?: string | null
           id: string
           nome?: string | null
+          observacao_admin?: string | null
         }
         Update: {
+          acesso_expira_em?: string
+          acesso_liberado?: boolean
           created_at?: string
           email?: string | null
           id?: string
           nome?: string | null
+          observacao_admin?: string | null
         }
         Relationships: []
       }
