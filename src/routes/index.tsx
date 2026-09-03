@@ -41,7 +41,14 @@ function Landing() {
         </Link>
       </header>
 
-      <section className="mx-auto max-w-3xl px-4 pb-16 pt-10 text-center sm:pt-20">
+      <section className="mx-auto max-w-3xl px-4 pb-16 pt-10 text-center sm:pt-16">
+        <div className="mb-6 flex justify-center">
+          <img
+            src="/logo.png"
+            alt="Sentinela"
+            className="size-24 sm:size-32 object-contain drop-shadow-2xl"
+          />
+        </div>
         <p className="text-xs font-semibold uppercase tracking-[0.28em] text-primary">
           Aprendizagem ativa
         </p>

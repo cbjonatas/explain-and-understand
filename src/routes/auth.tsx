@@ -73,13 +73,23 @@ function AuthPage() {
     <div className="flex min-h-screen items-center justify-center px-4 py-12">
       <div className="w-full max-w-md">
         <div className="mb-8 text-center">
-          <div className="flex justify-center">
-            <Brand />
+          <div className="flex flex-col items-center justify-center">
+            <img
+              src="/logo.png"
+              alt="Sentinela"
+              className="size-24 sm:size-28 object-contain drop-shadow-xl"
+            />
+            <h2 className="mt-4 font-display text-2xl font-bold tracking-tight text-foreground">
+              Sentinela
+            </h2>
+            <p className="mt-1 text-xs sm:text-sm font-medium text-muted-foreground">
+              Explique. Entenda. Domine.
+            </p>
           </div>
-          <h1 className="mt-6 text-2xl font-bold">
+          <h1 className="mt-6 text-xl font-bold">
             {mode === "signin" ? "Entrar" : "Criar conta"}
           </h1>
-          <p className="mt-2 text-sm text-muted-foreground">
+          <p className="mt-1 text-xs text-muted-foreground">
             Explique com suas palavras. O Sentinela mostra o que você realmente domina.
           </p>
         </div>

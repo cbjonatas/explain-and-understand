@@ -30,8 +30,8 @@ import { supabase } from "@/integrations/supabase/client";
 
 export function Brand({ compact = false }: { compact?: boolean }) {
   return (
-    <span className="flex items-center gap-2">
-      <Radar className="size-5 text-primary" aria-hidden />
+    <span className="flex items-center gap-2.5">
+      <img src="/logo.png" alt="Sentinela" className="size-7 object-contain drop-shadow-xs" />
       <span className="font-display text-lg font-bold tracking-tight">SENTINELA</span>
       {!compact && (
         <span className="hidden text-xs text-muted-foreground sm:inline">
