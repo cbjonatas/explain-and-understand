@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import { LogOut, Radar } from "lucide-react";
+import { LogOut, Radar, User } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -23,7 +23,6 @@ export function Brand({ compact = false }: { compact?: boolean }) {
 export function AppShell({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const { isAdmin } = useIsAdmin();
-
 
   return (
     <div className="min-h-screen">
@@ -57,6 +56,12 @@ export function AppShell({ children }: { children: ReactNode }) {
                 </Link>
               </>
             )}
+            <Link to="/profile">
+              <Button variant="ghost" size="sm" className="gap-1.5" title="Meu Perfil">
+                <User className="size-4" />
+                <span className="hidden sm:inline">Perfil</span>
+              </Button>
+            </Link>
             <Button
               variant="ghost"
               size="icon"
