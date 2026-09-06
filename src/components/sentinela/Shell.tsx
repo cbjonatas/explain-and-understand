@@ -23,6 +23,10 @@ export function Brand({ compact = false }: { compact?: boolean }) {
 export function AppShell({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const { isAdmin } = useIsAdmin();
+  const { access, hasAccess, loading: accessLoading } = useAccess();
+  const bloqueado = !accessLoading && !hasAccess;
+
+
 
 
   return (
