@@ -34,7 +34,14 @@ export const updateUser = createServerFn({ method: "POST" })
     toFlowResult(async () => {
       const { assertAdmin, updateUserFlow } = await import("./admin.server");
       await assertAdmin(context.supabase, context.userId);
-      return updateUserFlow(data);
+      return updateUserFlow({
+        userId: data.userId,
+        ...(data.nome !== undefined ? { nome: data.nome } : {}),
+        ...(data.email !== undefined ? { email: data.email } : {}),
+        ...(data.acessoLiberado !== undefined ? { acessoLiberado: data.acessoLiberado } : {}),
+        ...(data.acessoExpiraEm !== undefined ? { acessoExpiraEm: data.acessoExpiraEm } : {}),
+        ...(data.observacao !== undefined ? { observacao: data.observacao } : {}),
+      });
     }),
   );
 
