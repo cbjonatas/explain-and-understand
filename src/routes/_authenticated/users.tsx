@@ -92,7 +92,7 @@ function UsersPage() {
     queryKey: ["admin-users"],
     enabled: isAdmin,
     queryFn: async (): Promise<ManagedUser[]> => {
-      const result = await fetchUsers({ data: {} });
+      const result = await fetchUsers();
       if (!result.ok) throw new Error(result.message);
       return result.data;
     },
