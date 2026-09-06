@@ -16,11 +16,8 @@ import {
   Layers,
   MoreVertical,
   Plus,
-  Shield,
   Sparkles,
   Trash2,
-  User,
-  Users,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -48,7 +45,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/useAuth";
-import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
@@ -88,7 +84,6 @@ type MaterialItem = {
 
 function Dashboard() {
   const { user } = useAuth();
-  const { isAdmin } = useIsAdmin();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -466,19 +461,7 @@ function Dashboard() {
             Sua biblioteca personalizada organizada por Grupos, Concursos e Assuntos com a Sentinela.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {isAdmin && (
-            <Link to="/users">
-              <Button variant="outline" className="gap-1.5 text-primary border-primary/30 hover:bg-primary/10">
-                <Users className="size-4" /> Gestão de Usuários
-              </Button>
-            </Link>
-          )}
-          <Link to="/profile">
-            <Button variant="outline" className="gap-1.5">
-              <User className="size-4 text-primary" /> Meu Perfil
-            </Button>
-          </Link>
+        <div className="flex items-center gap-2">
           <Button variant="outline" onClick={() => setIsCreateGroupOpen(true)} className="gap-1.5">
             <FolderPlus className="size-4" /> Criar grupo
           </Button>
