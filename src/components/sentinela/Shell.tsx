@@ -38,22 +38,33 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Brand compact />
           </Link>
           <nav className="flex items-center gap-1">
-            <Link to="/dashboard">
-              <Button variant="ghost" size="sm">
-                Painel
-              </Button>
-            </Link>
-            <Link to="/history">
-              <Button variant="ghost" size="sm">
-                Histórico
-              </Button>
-            </Link>
+            {!bloqueado && (
+              <>
+                <Link to="/dashboard">
+                  <Button variant="ghost" size="sm">
+                    Painel
+                  </Button>
+                </Link>
+                <Link to="/history">
+                  <Button variant="ghost" size="sm">
+                    Histórico
+                  </Button>
+                </Link>
+              </>
+            )}
             {isAdmin && (
-              <Link to="/training">
-                <Button variant="ghost" size="sm">
-                  Treinamento
-                </Button>
-              </Link>
+              <>
+                <Link to="/training">
+                  <Button variant="ghost" size="sm">
+                    Treinamento
+                  </Button>
+                </Link>
+                <Link to="/users">
+                  <Button variant="ghost" size="sm">
+                    Usuários
+                  </Button>
+                </Link>
+              </>
             )}
             <Button
               variant="ghost"
@@ -69,7 +80,25 @@ export function AppShell({ children }: { children: ReactNode }) {
           </nav>
         </div>
       </header>
-      <main className="mx-auto max-w-5xl px-4 py-8">{children}</main>
+      <main className="mx-auto max-w-5xl px-4 py-8">
+        {access?.emTeste && access.diasRestantes !== null && !bloqueado && (
+          <p className="mb-4 rounded-lg border border-border bg-card px-4 py-2 text-xs text-muted-foreground">
+            Período de teste: {access.diasRestantes} dia(s) restante(s). Depois disso, o acesso
+            precisa ser liberado pelo administrador.
+          </p>
+        )}
+        {bloqueado ? (
+          <div className="mx-auto max-w-lg rounded-xl border border-border bg-card p-6 text-center">
+            <h1 className="font-display text-xl font-bold">Acesso pendente de liberação</h1>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Seu período de teste de 30 dias terminou. Fale com o administrador para liberar o seu
+              acesso à plataforma.
+            </p>
+          </div>
+        ) : (
+          children
+        )}
+      </main>
     </div>
   );
 }
